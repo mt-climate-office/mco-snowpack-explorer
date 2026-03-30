@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snow Drought Explorer · Montana Climate Office</title>
+  <meta name="description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="website">
+  <meta property="og:site_name"   content="Snow Drought Explorer">
+  <meta property="og:title"       content="Snow Drought Explorer">
+  <meta property="og:description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
+  <meta property="og:url"         content="https://snow.climate.umt.edu">
+
+  <!-- Prevent theme flash -->
+  <script>
+    (function () {
+      const saved = localStorage.getItem('mco-theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'));
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css">
+
+  <style>
+    /* ── Theme tokens ──────────────────────────────────────────────────────── */
+    :root {
+      --bg-deep:        #161b22;
+      --bg-surface:     #1e2530;
+      --bg-raised:      #2c3545;
+      --border:         #3a4558;
+      --border-glass:   rgba(255,255,255,0.08);
+      --text-primary:   #e8ecf0;
+      --text-secondary: #c0cad6;
+      --text-muted:     #8a99b0;
+      --text-dim:       #6b7a90;
+      --accent:         #1a6faf;
+      --accent-light:   #5aaee8;
+      --accent-dk:      #114f80;
+      --accent-hover:   rgba(26,111,175,0.10);
+      --brand-gradient: linear-gradient(90deg, var(--accent-dk), var(--accent), var(--accent-light), var(--accent));
+      --glass:          rgba(30,37,48,0.82);
+      --shadow:         0 4px 24px rgba(0,0,0,0.4);
+      --transition:     0.2s cubic-bezier(0.4,0,0.2,1);
+      --radius-sm:      4px;
+      --radius-md:      8px;
+      --radius-lg:      12px;
+    }
+
+    [data-theme="light"] {
+      --bg-deep:        #f0f2f5;
+      --bg-surface:     #ffffff;
+      --bg-raised:      #e8ecf0;
+      --border:         #c8cdd5;
+      --border-glass:   rgba(0,0,0,0.08);
+      --text-primary:   #1a1a2e;
+      --text-secondary: #3a3f4b;
+      --text-muted:     #5a6070;
+      --text-dim:       #7a8190;
+      --accent:         #1a6faf;
+      --accent-light:   #1563a0;
+      --accent-dk:      #0d4f7a;
+      --accent-hover:   rgba(26,111,175,0.08);
+      --brand-gradient: linear-gradient(90deg, #0a4a7a, #1266a8, #0d7fd4, #1266a8, #0a4a7a);
+      --glass:          rgba(255,255,255,0.88);
+      --shadow:         0 4px 24px rgba(0,0,0,0.1);
+    }
+
+    /* ── Reset & base ──────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: background var(--transition), color var(--transition);
+    }
+
+    :focus-visible { outline: 2px solid var(--accent-light); outline-offset: 2px; }
+
+    /* ── Navbar ────────────────────────────────────────────────────────────── */
+    #navbar {
+      flex-shrink: 0;
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.4rem 1rem;
+      min-height: 52px;
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      row-gap: 0.4rem;
+      transition: background var(--transition), border-color var(--transition);
+      z-index: 100;
+    }
+
+    #navbar::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--brand-gradient);
+      pointer-events: none;
+    }
+
+    .logo-link { display: flex; flex-shrink: 0; }
+    .logo-img   { width: 40px; height: 40px; border-radius: 6px; display: block; }
+
+    .nav-divider { width: 1px; height: 28px; background: var(--border); flex-shrink: 0; }
+
+    .brand { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; line-height: 1.2; }
+    .brand-title {
+      font-size: 0.65rem; font-weight: 500; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--text-muted); white-space: nowrap;
+    }
+    .brand-subtitle {
+      font-size: 0.55rem; font-weight: 400; letter-spacing: 0.04em;
+      font-style: italic; color: var(--text-dim); white-space: nowrap;
+    }
+
+    .controls {
+      display: flex; align-items: center; gap: 0.5rem;
+      flex-wrap: wrap; row-gap: 0.3rem;
+      margin-right: auto;
+    }
+
+    .control-group  { display: flex; align-items: center; gap: 0.3rem; }
+    .control-label  {
+      font-size: 0.7rem; font-weight: 500; letter-spacing: 0.05em;
+      text-transform: uppercase; color: var(--text-muted); white-space: nowrap;
+    }
+
+    /* Date input */
+    input[type="date"] {
+      background: none;
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0 0.55rem;
+      font-size: 0.78rem;
+      font-family: inherit;
+      cursor: pointer;
+      height: 34px;
+      -webkit-appearance: none;
+      appearance: none;
+      transition: var(--transition);
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(60%); cursor: pointer; }
+    [data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(30%); }
+    input[type="date"]:hover { background: var(--accent-hover); border-color: var(--accent); }
+    input[type="date"]:focus { border-color: var(--accent-light); background: var(--accent-hover); outline: none; }
+
+    .date-stepper      { display: flex; align-items: center; gap: 4px; }
+    .date-step-btns    { display: flex; flex-direction: column; gap: 2px; }
+    .nav-btn.date-step {
+      padding: 0 4px; min-height: 0; height: 15px; min-width: 20px;
+      border-radius: var(--radius-sm); justify-content: center;
+    }
+
+    /* Nav buttons */
+    .nav-actions { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
+
+    .nav-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 12px; min-height: 34px;
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      background: none; color: var(--text-secondary);
+      cursor: pointer; font-size: 0.78rem; font-weight: 500;
+      font-family: inherit; white-space: nowrap; flex-shrink: 0;
+      transition: var(--transition);
+    }
+    .nav-btn:hover { background: var(--accent-hover); border-color: var(--accent); color: var(--text-primary); }
+    .nav-btn svg   { flex-shrink: 0; stroke: currentColor; }
+    .nav-btn.icon-only { padding: 0.4rem; min-width: 34px; justify-content: center; }
+    .nav-btn[aria-pressed="true"] { background: var(--accent-hover); border-color: var(--accent); color: var(--text-primary); }
+
+    #btn-info {
+      border-radius: 50%; border-color: var(--accent);
+      color: var(--accent-light); font-size: 1rem; font-weight: 600;
+      padding: 0; width: 34px; height: 34px; min-height: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #btn-info:hover { background: var(--accent); color: #fff; }
+
+    /* ── Map ───────────────────────────────────────────────────────────────── */
+    #map-container { flex: 1; min-height: 0; position: relative; }
+
+    #map { width: 100%; height: 100%; }
+
+    /* ── Legend ────────────────────────────────────────────────────────────── */
+    #legend {
+      position: absolute; bottom: max(36px, calc(12px + env(safe-area-inset-bottom))); left: 12px; z-index: 10;
+      background: var(--glass);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-md);
+      padding: 8px 10px 6px;
+      box-shadow: var(--shadow);
+      min-width: 120px;
+      pointer-events: none;
+    }
+
+    .legend-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 2px; }
+    #legend h4 { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin: 0; }
+    #legend-info-btn {
+      pointer-events: auto;
+      background: none; border: 1px solid var(--border-glass);
+      border-radius: 50%; width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text-dim);
+      font-size: 0.6rem; font-weight: 700; flex-shrink: 0;
+      transition: color var(--transition), border-color var(--transition);
+    }
+    #legend-info-btn:hover { color: var(--accent-light); border-color: var(--accent-light); }
+
+    #legend-toggle-btn {
+      pointer-events: auto;
+      background: none; border: none; padding: 0; flex-shrink: 0;
+      width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text-dim);
+      transition: color var(--transition), transform var(--transition);
+    }
+    #legend-toggle-btn:hover { color: var(--accent-light); }
+    #legend.collapsed #legend-toggle-btn { transform: rotate(180deg); }
+
+    #legend-body {
+      overflow: hidden;
+      max-height: 500px; opacity: 1;
+      transition: max-height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease;
+    }
+    #legend.collapsed #legend-body { max-height: 0; opacity: 0; }
+
+    .legend-sub { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; }
+    #legend-meta {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem; color: var(--text-dim);
+      line-height: 1.5; margin-bottom: 8px;
+    }
+    .legend-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+    .legend-swatch { width: 16px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+    .legend-lbl { font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; }
+
+    /* ── Provenance modal ───────────────────────────────────────────────────── */
+    .provenance-dates {
+      display: flex; flex-wrap: wrap; gap: 3px 14px;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem; color: var(--text-secondary);
+      margin-top: 0.4rem;
+    }
+
+    /* ── Tooltip ───────────────────────────────────────────────────────────── */
+    #tooltip {
+      position: fixed;
+      background: var(--glass);
+      border: 1px solid var(--accent-light);
+      border-radius: 5px;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.75rem; font-weight: 500;
+      color: var(--text-primary);
+      pointer-events: none;
+      z-index: 50;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.1s;
+      backdrop-filter: blur(8px);
+    }
+    #tooltip.visible { opacity: 1; }
+
+    /* ── Toast ─────────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem; left: 50%;
+      transform: translateX(-50%) translateY(0.75rem);
+      background: var(--bg-surface);
+      border: 1px solid var(--accent-light);
+      border-radius: 6px;
+      padding: 0.5rem 1rem;
+      font-size: 0.82rem; color: var(--text-primary);
+      opacity: 0; transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none; z-index: 400;
+      box-shadow: var(--shadow);
+    }
+    #toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ── Info modal ─────────────────────────────────────────────────────────── */
+    #info-modal, #provenance-modal {
+      background: transparent; border: none; padding: 1rem;
+      position: fixed; inset: 0; margin: auto;
+      width: fit-content; height: fit-content;
+      max-width: calc(100vw - 2rem); max-height: calc(100dvh - 2rem);
+    }
+    #info-modal::backdrop, #provenance-modal::backdrop { background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); }
+
+    .info-modal-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      width: min(540px, calc(100vw - 4rem));
+      max-height: calc(100dvh - 4rem);
+      overflow-y: auto;
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+
+    .info-modal-header {
+      display: flex; justify-content: space-between;
+      align-items: flex-start; margin-bottom: 1.25rem; gap: 1rem;
+    }
+    .info-modal-title    { font-size: 1.05rem; font-weight: 700; color: var(--accent-light); }
+    .info-modal-subtitle { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+    .modal-close {
+      display: flex; align-items: center; justify-content: center;
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text-muted); font-size: 1.2rem; cursor: pointer;
+      line-height: 1; flex-shrink: 0; min-width: 34px; min-height: 34px;
+      transition: color var(--transition), border-color var(--transition);
+    }
+    .modal-close:hover { color: var(--text-primary); border-color: var(--accent-light); }
+
+    .info-section { margin-bottom: 1.25rem; }
+    .info-section:last-child { margin-bottom: 0; }
+    .info-section h3 {
+      font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--text-secondary);
+      margin-bottom: 0.5rem; padding-bottom: 0.3rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .info-section p {
+      font-size: 0.85rem; color: var(--text-secondary);
+      line-height: 1.6; margin-bottom: 0.5rem;
+    }
+    .info-section p:last-child { margin-bottom: 0; }
+    .info-section a { color: var(--accent-light); text-decoration: none; }
+    .info-section a:hover { text-decoration: underline; }
+    .info-section ul {
+      margin: 0; padding-left: 1.1rem;
+      font-size: 0.85rem; color: var(--text-secondary); line-height: 1.7;
+    }
+    .info-section ul li { margin-bottom: 0.2rem; }
+    .info-section ul li:last-child { margin-bottom: 0; }
+    .info-section ul li strong { color: var(--text-primary); font-weight: 600; }
+    .info-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; border-radius: var(--radius-sm);
+      background: var(--accent-hover); border: 1px solid var(--border);
+      color: var(--text-secondary); vertical-align: middle;
+      margin-right: 0.35rem; flex-shrink: 0;
+    }
+    .info-icon svg { stroke: currentColor; }
+
+    /* ── Segmented button groups (Method / View / Level) ────────────────────── */
+    .seg-btns { display: flex; gap: 0; }
+    .seg-btn {
+      padding: 4px 9px; min-height: 28px; height: 28px;
+      border-radius: 0; border-right-width: 0;
+      font-size: 0.72rem; font-weight: 600;
+    }
+    .seg-btn:first-child { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+    .seg-btn:last-child  { border-radius: 0 var(--radius-md) var(--radius-md) 0; border-right-width: 1px; }
+    .seg-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent-light); color: #fff; }
+
+    /* ── Responsive ────────────────────────────────────────────────────────── */
+    /* Step 1 — hide text labels */
+    @media (max-width: 1400px) { .control-label { display: none; } .btn-label { display: none; } }
+    /* Step 2 — hide brand + divider, tighten gaps */
+    @media (max-width: 1060px) {
+      .brand, .nav-divider { display: none; }
+      #navbar { padding-left: 0.6rem; padding-right: 0.6rem; gap: 0.4rem; }
+      .nav-actions { gap: 0.2rem; }
+    }
+    /* Step 3 — allow wrapping below portrait-phone width */
+    @media (max-width: 640px)  { .nav-btn.date-step { height: 22px; } }
+    /* Above 641px keep controls on one line */
+    @media (min-width: 641px)  { #navbar { flex-wrap: nowrap; } .controls { flex-wrap: nowrap; } }
+  </style>
+</head>
+<body>
+
+<header id="navbar">
+  <a href="https://climate.umt.edu" target="_blank" rel="noopener noreferrer"
+     class="logo-link" aria-label="Montana Climate Office">
+    <img src="https://climate.umt.edu/assets/images/MCO_logo_icon_only.png" alt="" class="logo-img">
+  </a>
+
+  <div class="nav-divider" aria-hidden="true"></div>
+
+  <div class="brand">
+    <span class="brand-title">Snow Drought Explorer</span>
+    <span class="brand-subtitle">A service of the Montana Climate Office</span>
+  </div>
+
+  <div class="controls">
+    <div class="control-group">
+      <label class="control-label" for="date-input">Date</label>
+      <div class="date-stepper">
+        <input type="date" id="date-input" aria-label="Date">
+        <div class="date-step-btns">
+          <button class="nav-btn date-step" id="btn-date-next" aria-label="Next day">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="18 15 12 9 6 15"/>
+            </svg>
+          </button>
+          <button class="nav-btn date-step" id="btn-date-prev" aria-label="Previous day">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <span class="control-label">Method</span>
+      <div class="seg-btns" role="group" aria-label="Percentile method">
+        <button class="nav-btn seg-btn" data-method="zig"  aria-pressed="true">ZIG</button>
+        <button class="nav-btn seg-btn" data-method="ecdf" aria-pressed="false">ECDF</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <span class="control-label">View</span>
+      <div class="seg-btns" role="group" aria-label="Map view">
+        <button class="nav-btn seg-btn" data-view="gridded" aria-pressed="true">Gridded</button>
+        <button class="nav-btn seg-btn" data-view="zonal"   aria-pressed="false">Zonal</button>
+      </div>
+    </div>
+
+    <div class="control-group" id="huc-level-group" style="display:none">
+      <span class="control-label">Level</span>
+      <div class="seg-btns" role="group" aria-label="HUC level">
+        <button class="nav-btn seg-btn" data-huc="2" aria-pressed="true">HUC2</button>
+        <button class="nav-btn seg-btn" data-huc="4" aria-pressed="false">HUC4</button>
+        <button class="nav-btn seg-btn" data-huc="6" aria-pressed="false">HUC6</button>
+        <button class="nav-btn seg-btn" data-huc="8" aria-pressed="false">HUC8</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-actions">
+    <button class="nav-btn icon-only" id="btn-share" title="Copy shareable link" aria-label="Copy shareable link">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+      </svg>
+      <span class="btn-label">Share</span>
+    </button>
+
+    <button class="nav-btn icon-only" id="btn-export" title="Export map as PNG" aria-label="Export map as PNG">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      <span class="btn-label">Export</span>
+    </button>
+
+    <button class="nav-btn icon-only" id="btn-theme" title="Toggle theme" aria-label="Toggle theme">
+      <svg id="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+      <svg id="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1"  x2="12" y2="3"/>  <line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/>   <line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+    </button>
+
+    <button class="nav-btn" id="btn-info" aria-label="About this map">?</button>
+  </div>
+</header>
+
+<div id="map-container">
+  <div id="map" role="application" aria-label="SWE Percentile Map"></div>
+
+  <div id="legend">
+    <div class="legend-header">
+      <h4>SWE Percentile</h4>
+      <button id="legend-info-btn" aria-label="Data provenance">i</button>
+      <button id="legend-toggle-btn" aria-label="Collapse legend" aria-expanded="true">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+             stroke="currentColor" aria-hidden="true">
+          <polyline points="18 15 12 9 6 15"/>
+        </svg>
+      </button>
+    </div>
+    <div id="legend-body">
+      <div class="legend-sub" id="legend-sub"></div>
+      <div id="legend-meta"></div>
+      <div id="legend-rows"></div>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip" role="tooltip"></div>
+<div id="toast"   role="status" aria-live="polite"></div>
+
+<dialog id="info-modal" aria-labelledby="info-modal-title">
+  <div class="info-modal-box">
+    <div class="info-modal-header">
+      <div>
+        <div class="info-modal-title" id="info-modal-title">Snow Drought Explorer</div>
+        <div class="info-modal-subtitle">Montana Climate Office</div>
+      </div>
+      <button class="modal-close" id="btn-info-close" aria-label="Close">×</button>
+    </div>
+
+    <div class="info-section">
+      <h3>About</h3>
+      <p>The Snow Drought Explorer maps daily <strong>Snow Water Equivalent (SWE) percentiles</strong>
+         across the contiguous United States, comparing current snowpack to the same calendar day
+         across all available historical years. Values near <strong>0</strong> indicate historically
+         low snowpack; values near <strong>100</strong> indicate historically high snowpack.</p>
+    </div>
+
+    <div class="info-section">
+      <h3>Views</h3>
+      <ul>
+        <li><strong>Gridded</strong> — ~1&thinsp;km raster of SWE percentiles derived directly from
+            <a href="https://nsidc.org/data/g02158" target="_blank" rel="noopener">NOAA SNODAS</a>.</li>
+        <li><strong>Zonal</strong> — area-weighted mean SWE percentiles aggregated to
+            <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset" target="_blank" rel="noopener">USGS Watershed Boundary Dataset</a>
+            (WBD) units at HUC levels 2, 4, 6, and 8. Hover over a watershed for its name and percentile.</li>
+      </ul>
+    </div>
+
+    <div class="info-section">
+      <h3>Percentile methods</h3>
+      <ul>
+        <li><strong>ZIG</strong> — Zero-inflated gamma distribution fit by L-moments; smooths sparse
+            records and extrapolates beyond observed extremes.</li>
+        <li><strong>ECDF</strong> — Piecewise-linear empirical CDF; makes no distributional assumptions
+            beyond the observed data.</li>
+      </ul>
+      <p>Click the <strong>ⓘ</strong> button in the legend for reference dates and full provenance
+         details for the current date and method.</p>
+    </div>
+
+    <div class="info-section">
+      <h3>Color scale</h3>
+      <p>Colors follow the <a href="https://droughtmonitor.unl.edu" target="_blank" rel="noopener">U.S. Drought Monitor</a>
+         convention — reds indicate low snowpack (drought conditions), white near-normal, and blues
+         exceptionally high snowpack.</p>
+    </div>
+
+    <div class="info-section">
+      <h3>Navigation</h3>
+      <ul>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg></span><strong>Date</strong> — Use the date picker or ▲▼ arrows to step through days.</li>
+        <li><strong>Scroll</strong> or <strong>pinch</strong> to zoom the map; drag to pan.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><strong>Share</strong> — Copy a link to the current view to your clipboard.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><strong>Export</strong> — Download a PNG of the current map.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><strong>Theme</strong> — Toggle dark and light mode.</li>
+      </ul>
+    </div>
+
+    <div class="info-section">
+      <h3>Data &amp; processing</h3>
+      <p>SNODAS daily SWE grids are available from September 30, 2003 to present. Percentiles and watershed
+         aggregations are processed and hosted by the
+         <a href="https://climate.umt.edu" target="_blank" rel="noopener">Montana Climate Office</a>.</p>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="provenance-modal" aria-labelledby="provenance-modal-title">
+  <div class="info-modal-box">
+    <div class="info-modal-header">
+      <div>
+        <div class="info-modal-title" id="provenance-modal-title">Data Provenance</div>
+        <div class="info-modal-subtitle" id="provenance-modal-subtitle"></div>
+      </div>
+      <button class="modal-close" id="btn-provenance-close" aria-label="Close">×</button>
+    </div>
+    <div id="provenance-content"></div>
+  </div>
+</dialog>
+
+<script src="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fzstd@0.1.1/umd/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatgeobuf@3/dist/flatgeobuf-geojson.min.js"></script>
+<script src="cog-protocol.js"></script>
+<script type="module">
+import { parquetRead } from 'https://esm.sh/hyparquet@1';
+
+// Architecture overview:
+//   - Gridded view: renders a COG raster tile layer via the custom cog:// MapLibre protocol.
+//   - Zonal view: renders HUC watershed polygons colored by aggregated SWE percentile.
+//     Boundaries are loaded from FlatGeobuf (cached in Cache API across sessions).
+//     Percentiles are loaded from Parquet (cached in memory per date+method).
+//     Feature state drives the fill color so geometry is only uploaded once per level.
+//   - Layer order (back → front): swe → huc-fill → hillshade → huc-line → labels
+
+(async () => {
+
+  // ── Constants ────────────────────────────────────────────────────────────
+  const SNODAS_START = '2004-01-01';
+  const S3_ROOT    = 'https://mco-snodas.s3.us-west-2.amazonaws.com/normals/gridded';
+  const FGB_ROOT   = 'https://mco-snodas.s3.us-west-2.amazonaws.com/cache/data/fgb';
+  const ZONAL_ROOT = 'https://mco-snodas.s3.us-west-2.amazonaws.com/normals/zonal/wbd';
+  const BREAKS  = [0, 2, 5, 10, 20, 30, 70, 80, 90, 95, 98];
+  const COLORS  = [
+    [115,  0,   0], // D4 exceptional drought
+    [230,  0,   0], // D3 extreme drought
+    [255, 170,  0], // D2 severe drought
+    [252, 211,127], // D1 moderate drought
+    [255, 255,  0], // D0 abnormally dry
+    [255, 255,255], // near-normal
+    [130, 252,249], // W0 abnormally wet
+    [ 50, 225,250], // W1 moderate wet
+    [ 50,  92,254], // W2 severe wet
+    [ 64,  48,227], // W3 extreme wet
+    [ 48,  59,131], // W4 exceptional wet
+  ];
+
+  // Step thresholds + colors for HUC fill expressions (mirrors the COG colormap)
+  const HUC_COLOR_STOPS = BREAKS.slice(1).flatMap((b, i) => [b, `rgb(${COLORS[i + 1]})`]);
+
+  // ── Colormap ─────────────────────────────────────────────────────────────
+  CogProtocol.registerColormap('ptile', CogProtocol.makeStepColormap({
+    breaks: BREAKS, colors: COLORS, alpha: 210, domain: [0, 100],
+  }));
+  CogProtocol.initCogProtocol(maplibregl);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function todayMT() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+  }
+
+  function formatDate(isoStr) {
+    return new Date(`${isoStr}T12:00:00`).toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric',
+    });
+  }
+
+  function ordinal(n) {
+    const s = [,'st','nd','rd'][n % 100 >> 3 ^ 1 && n % 10] || 'th';
+    return `${n}${s}`;
+  }
+
+  // ── URL / state ───────────────────────────────────────────────────────────
+  const urlParams = new URLSearchParams(location.search);
+  let currentMethod   = ['zig','ecdf'].includes(urlParams.get('method')) ? urlParams.get('method') : 'zig';
+  let currentDate     = urlParams.get('date') || todayMT();
+  let currentView     = ['gridded','zonal'].includes(urlParams.get('view')) ? urlParams.get('view') : 'gridded';
+  let currentHucLevel = (() => { const v = parseInt(urlParams.get('huc')); return [2,4,6,8].includes(v) ? v : 2; })();
+  if (currentDate < SNODAS_START) currentDate = SNODAS_START;
+  if (currentDate > todayMT())    currentDate = todayMT();
+
+  // Initial map position from URL (lat/lng/zoom), if present
+  const _initLat  = parseFloat(urlParams.get('lat'));
+  const _initLng  = parseFloat(urlParams.get('lng'));
+  const _initZoom = parseFloat(urlParams.get('zoom'));
+  const _hasInitPos = !isNaN(_initLat) && !isNaN(_initLng) && !isNaN(_initZoom);
+
+  // URL builders (defined after state so default args are readable)
+  const cogUrl        = (d, m = currentMethod) => `${S3_ROOT}/${m}/${d}/${d}_${m}_swe_ptile.tif`;
+  const fgbUrl        = lvl   => `${FGB_ROOT}/huc${lvl}.fgb`;
+  const zonalUrl      = (d, m) => `${ZONAL_ROOT}/${m}/${d}/${d}_${m}_swe_normals.parquet`;
+  const provenanceUrl = (d, m) => `${S3_ROOT}/${m}/${d}/${d}_${m}_provenance.json`;
+
+  async function cogExists(d) {
+    try {
+      const r = await fetch(cogUrl(d), { method: 'GET', headers: { Range: 'bytes=0-3' } });
+      return r.ok || r.status === 206;
+    } catch { return false; }
+  }
+
+  function pushState() {
+    const params = { date: currentDate, method: currentMethod, view: currentView };
+    if (currentView === 'zonal') params.huc = currentHucLevel;
+    try {
+      const { lng, lat } = map.getCenter();
+      params.lng  = lng.toFixed(4);
+      params.lat  = lat.toFixed(4);
+      params.zoom = map.getZoom().toFixed(2);
+    } catch {}  // map not yet initialized on first call
+    history.replaceState(null, '', `?${new URLSearchParams(params)}`);
+    document.title = `Snow Drought Explorer · ${currentDate} · Montana Climate Office`;
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  const toastEl = document.getElementById('toast');
+  let _toastTimer;
+  function showToast(msg, ms = 2400) {
+    clearTimeout(_toastTimer);
+    toastEl.textContent = msg;
+    toastEl.classList.add('visible');
+    _toastTimer = setTimeout(() => toastEl.classList.remove('visible'), ms);
+  }
+
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  function syncThemeIcons() {
+    const dark = document.documentElement.dataset.theme !== 'light';
+    // Show the icon for what you'd switch TO (dark→sun, light→moon)
+    document.getElementById('icon-moon').style.display = dark  ? 'none' : '';
+    document.getElementById('icon-sun') .style.display = dark  ? '' : 'none';
+  }
+  syncThemeIcons();
+
+  document.getElementById('btn-theme').addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('mco-theme', next); } catch {}
+    syncThemeIcons();
+  });
+
+  // ── Legend ────────────────────────────────────────────────────────────────
+  const legendRowsEl = document.getElementById('legend-rows');
+  for (let i = 0; i < BREAKS.length; i++) {
+    const lo  = BREAKS[i];
+    const hi  = i + 1 < BREAKS.length ? BREAKS[i + 1] : null;
+    const lbl = lo === 0 ? `< ${hi}` : hi === null ? `≥ ${lo}` : `${lo}–${hi}`;
+    const row    = document.createElement('div');
+    row.className = 'legend-row';
+    const swatch = document.createElement('div');
+    swatch.className = 'legend-swatch';
+    const [r, g, b] = COLORS[i];
+    swatch.style.background = `rgb(${r},${g},${b})`;
+    const label = document.createElement('div');
+    label.className = 'legend-lbl';
+    label.textContent = lbl;
+    row.appendChild(swatch);
+    row.appendChild(label);
+    legendRowsEl.appendChild(row);
+  }
+
+  // ── Legend toggle ─────────────────────────────────────────────────────────
+  const legendEl     = document.getElementById('legend');
+  const legendToggle = document.getElementById('legend-toggle-btn');
+
+  function setLegendCollapsed(collapsed) {
+    legendEl.classList.toggle('collapsed', collapsed);
+    legendToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    legendToggle.setAttribute('aria-label',    collapsed ? 'Expand legend' : 'Collapse legend');
+  }
+
+  if (window.innerWidth <= 640) setLegendCollapsed(true);
+  legendToggle.addEventListener('click', () =>
+    setLegendCollapsed(!legendEl.classList.contains('collapsed')));
+
+  // ── Provenance ────────────────────────────────────────────────────────────
+  const _provenanceCache = new Map(); // `${date}_${method}` → provenance object
+
+  async function fetchProvenance(d, m) {
+    const key = `${d}_${m}`;
+    if (_provenanceCache.has(key)) return _provenanceCache.get(key);
+    try {
+      const res = await fetch(provenanceUrl(d, m));
+      if (!res.ok) return null;
+      const prov = await res.json();
+      _provenanceCache.set(key, prov);
+      return prov;
+    } catch { return null; }
+  }
+
+  function updateLegendMeta(prov) {
+    document.getElementById('legend-sub').textContent =
+      { zig: 'ZIG', ecdf: 'ECDF' }[currentMethod] || '';
+    const el = document.getElementById('legend-meta');
+    if (!prov) { el.textContent = ''; return; }
+    const years    = prov.reference_dates.map(d => d.slice(0, 4));
+    const refRange = `${years[0]}\u2013${years[years.length - 1]}`;
+    el.innerHTML   = `${formatDate(prov.normals_date)}<br>${refRange}`;
+  }
+
+  fetchProvenance(currentDate, currentMethod).then(updateLegendMeta);
+
+  // ── Map ───────────────────────────────────────────────────────────────────
+  const STADIA_API_KEY = 'ad892279-b205-49ef-88fc-f413b876a985';
+  const MAPTILER_KEY   = 'YCmYdkq8uI0q7bR5MBdY';
+  const COG_BOUNDS     = [[-124.733, 24.95], [-66.94, 52.875]];
+  const FIT_OPTS       = { padding: 20 };
+  let _fitZoom;
+
+  // Pre-fetch COG metadata in parallel with the Stadia style loading
+  CogProtocol.preload(cogUrl(currentDate));
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: `https://tiles.stadiamaps.com/styles/stamen_toner_lite.json?api_key=${STADIA_API_KEY}`,
+    ...(_hasInitPos
+      ? { center: [_initLng, _initLat], zoom: _initZoom }
+      : { bounds: COG_BOUNDS, fitBoundsOptions: FIT_OPTS }),
+    canvasContextAttributes: { preserveDrawingBuffer: true }, // required for PNG export (MapLibre 5.x API)
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+  map.on('load', () => {
+    _fitZoom = map.cameraForBounds(COG_BOUNDS, FIT_OPTS).zoom;
+
+    // Insert our layers below the first symbol (label) layer so text stays on top
+    const before = map.getStyle().layers.find(l => l.type === 'symbol')?.id;
+
+    // Hillshade
+    map.addSource('dem', {
+      type: 'raster-dem',
+      url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${MAPTILER_KEY}`,
+      tileSize: 256,
+      attribution: '© <a href="https://www.maptiler.com/copyright/">MapTiler</a>',
+    });
+    map.addLayer({
+      id: 'hillshade', type: 'hillshade', source: 'dem',
+      paint: { 'hillshade-exaggeration': 0.35 },
+    }, before);
+
+    // HUC zonal layers — empty until a level is selected
+    // Layer order (back→front): swe → huc-fill → hillshade → huc-line → labels
+    map.addSource('huc', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({
+      id: 'huc-fill', type: 'fill', source: 'huc',
+      layout: { visibility: 'none' },
+      paint: {
+        'fill-color': ['case',
+          ['==', ['feature-state', 'swe_ptile'], null], 'rgb(128,128,128)',
+          ['step', ['feature-state', 'swe_ptile'], `rgb(${COLORS[0]})`, ...HUC_COLOR_STOPS],
+        ],
+        'fill-opacity': ['case', ['==', ['feature-state', 'swe_ptile'], null], 0.1, 0.85],
+      },
+    }, 'hillshade');
+    map.addLayer({
+      id: 'huc-line', type: 'line', source: 'huc',
+      layout: { visibility: 'none' },
+      paint: { 'line-color': '#333', 'line-width': 0.7, 'line-opacity': 0.7 },
+    }, before);
+
+    // SWE COG — sits below HUC fills
+    map.addSource('swe', {
+      type: 'raster',
+      tiles: [`cog://ptile/${cogUrl(currentDate)}/{z}/{x}/{y}`],
+      tileSize: 256, minzoom: 2, maxzoom: 14,
+      attribution: 'NOAA SNODAS | Montana Climate Office',
+    });
+    map.addLayer({
+      id: 'swe', type: 'raster', source: 'swe',
+      paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 },
+    }, 'huc-fill');
+
+    // Apply initial view state.
+    // Build _initReady: a promise that resolves only when the first data layer
+    // is genuinely ready to render (geometry + colors applied).
+    //   • Zonal  → await setHucLayer() (FGB fetch + parquet + feature states)
+    //   • Gridded → triggerRepaint to issue COG tile requests, then await idle
+    map.setLayoutProperty('swe', 'visibility', currentView === 'gridded' ? 'visible' : 'none');
+    const _initReady = currentView === 'zonal'
+      ? setHucLayer()
+      : new Promise(r => { map.triggerRepaint(); map.once('idle', r); });
+
+    // Push position/zoom to URL on every pan or zoom
+    map.on('moveend', pushState);
+
+    _mapReady = true;
+
+    // URL-triggered export: fire only after the data layer is ready
+    if (urlParams.get('export') === 'true') {
+      _initReady.then(exportMap);
+    }
+  });
+
+  let _mapReady = false;
+  map.on('zoomend', () => {
+    if (_mapReady && _fitZoom !== undefined && map.getZoom() < _fitZoom) {
+      map.fitBounds(COG_BOUNDS, { ...FIT_OPTS, animate: true });
+    }
+  });
+
+  // Update the COG raster tiles to a new date (no-op if source not yet added).
+  function setSweLayer(d) {
+    map.getSource('swe')?.setTiles([`cog://ptile/${cogUrl(d)}/{z}/{x}/{y}`]);
+  }
+
+  // Refresh whichever layers are active for the current date + method.
+  function refreshLayers() {
+    if (!map.loaded()) return;
+    setSweLayer(currentDate);
+    if (currentView === 'zonal') setHucLayer();
+  }
+
+
+  // ── Date picker ───────────────────────────────────────────────────────────
+  const dateInput = document.getElementById('date-input');
+  dateInput.min   = SNODAS_START;
+  dateInput.max   = todayMT();
+  dateInput.value = currentDate;
+
+  async function setDate(dateStr) {
+    let d = dateStr;
+    if (d < SNODAS_START) { d = SNODAS_START; showToast(`Earliest available date: ${d}`); }
+    if (d > todayMT())    { d = todayMT();     showToast(`No future dates available`); }
+    if (d === currentDate) { dateInput.value = d; return; }
+
+    const ok = await cogExists(d);
+    if (!ok) {
+      showToast(`No SNODAS data found for ${d}`);
+      dateInput.value = currentDate;
+      return;
+    }
+
+    currentDate = d;
+    dateInput.value = currentDate;
+    pushState();
+    CogProtocol.preload(cogUrl(currentDate));
+    refreshLayers();
+    fetchProvenance(currentDate, currentMethod).then(updateLegendMeta);
+  }
+
+  dateInput.addEventListener('change', () => setDate(dateInput.value));
+
+  // Stepper with hold-to-repeat
+  function makeStepper(btnId, delta) {
+    const btn = document.getElementById(btnId);
+    let timeout, interval;
+    const step = () => {
+      const d = new Date(`${currentDate}T12:00:00`);
+      d.setDate(d.getDate() + delta);
+      setDate(d.toISOString().slice(0, 10));
+    };
+    const start = () => {
+      step();
+      timeout = setTimeout(() => { interval = setInterval(step, 120); }, 450);
+    };
+    const stop = () => { clearTimeout(timeout); clearInterval(interval); };
+    btn.addEventListener('mousedown', start);
+    btn.addEventListener('touchstart', (e) => { e.preventDefault(); start(); }, { passive: false });
+    ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(ev => btn.addEventListener(ev, stop));
+  }
+  makeStepper('btn-date-next', +1);
+  makeStepper('btn-date-prev', -1);
+
+  // ── Method toggle ─────────────────────────────────────────────────────────
+  function setMethod(m) {
+    currentMethod = m;
+    document.querySelectorAll('[data-method]').forEach(btn =>
+      btn.setAttribute('aria-pressed', btn.dataset.method === m ? 'true' : 'false'));
+    pushState();
+    CogProtocol.preload(cogUrl(currentDate, m));
+    refreshLayers();
+    fetchProvenance(currentDate, currentMethod).then(updateLegendMeta);
+  }
+
+  document.querySelectorAll('[data-method]').forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.method === currentMethod ? 'true' : 'false');
+    btn.addEventListener('click', () => setMethod(btn.dataset.method));
+  });
+
+  // ── HUC zonal layers ──────────────────────────────────────────────────────
+  const _fgbCache   = new Map(); // level → GeoJSON features array (with id field)
+  const _zonalCache = new Map(); // `${date}_${method}` → Map<zone, ptile>
+  let _hucSourceLevel = null;    // which level is currently loaded into the 'huc' source
+
+  // Fetch with Cache API persistence (falls back to plain fetch in non-secure contexts)
+  async function fetchCached(url) {
+    try {
+      const cache = await caches.open('mco-snodas-fgb-v1');
+      const hit   = await cache.match(url);
+      if (hit) return hit;
+      const res = await fetch(url);
+      if (res.ok) cache.put(url, res.clone());
+      return res;
+    } catch {
+      return fetch(url);
+    }
+  }
+
+  async function setHucLayer() {
+    if (!map.getSource('huc')) return;
+    try {
+      // ── Step 1: load FGB geometry (once per level, persisted in Cache API + memory) ──
+      if (!_fgbCache.has(currentHucLevel)) {
+        const res = await fetchCached(fgbUrl(currentHucLevel));
+        if (!res.ok) throw new Error(`FGB fetch failed: ${res.status}`);
+        const features = [];
+        for await (const f of flatgeobuf.deserialize(res.body))
+          features.push({ ...f, id: f.properties.huc });
+        _fgbCache.set(currentHucLevel, features);
+      }
+
+      // ── Step 2: push geometry to source only when the level changes ──
+      if (_hucSourceLevel !== currentHucLevel) {
+        map.getSource('huc').setData({
+          type: 'FeatureCollection',
+          features: _fgbCache.get(currentHucLevel),
+        });
+        _hucSourceLevel = currentHucLevel;
+      }
+
+      // ── Step 3: load parquet lookup (small — cached in memory) ──
+      const key = `${currentDate}_${currentMethod}`;
+      if (!_zonalCache.has(key)) {
+        const res = await fetch(zonalUrl(currentDate, currentMethod));
+        if (!res.ok) throw new Error(`Parquet fetch failed: ${res.status}`);
+        const ab = await res.arrayBuffer();
+        const lookup = new Map();
+        await parquetRead({
+          file: ab,
+          columns: ['zone', 'swe_ptile'],
+          compressors: { ZSTD: (input, _len) => fzstd.decompress(input) },
+          onComplete: rows => {
+            for (const [zone, ptile] of rows)
+              if (zone != null) lookup.set(String(zone), ptile ?? null);
+          },
+        });
+        _zonalCache.set(key, lookup);
+      }
+
+      // ── Step 4: push swe_ptile as feature state (no geometry re-upload) ──
+      const zonalData = _zonalCache.get(key);
+      for (const f of _fgbCache.get(currentHucLevel)) {
+        map.setFeatureState(
+          { source: 'huc', id: f.id },
+          { swe_ptile: zonalData.get(String(f.properties.huc)) ?? null }
+        );
+      }
+
+      map.setLayoutProperty('huc-fill', 'visibility', 'visible');
+      map.setLayoutProperty('huc-line', 'visibility', 'visible');
+      map.setLayoutProperty('swe',      'visibility', 'none');
+    } catch (err) {
+      console.error('[setHucLayer]', err);
+      showToast('Failed to load basin data');
+    }
+  }
+
+  function setHucLevel(lvl) {
+    currentHucLevel = lvl;
+    document.querySelectorAll('[data-huc]').forEach(btn =>
+      btn.setAttribute('aria-pressed', parseInt(btn.dataset.huc) === lvl ? 'true' : 'false'));
+    pushState();
+    if (map.loaded()) setHucLayer();
+  }
+
+  function setView(v) {
+    currentView = v;
+    document.querySelectorAll('[data-view]').forEach(btn =>
+      btn.setAttribute('aria-pressed', btn.dataset.view === v ? 'true' : 'false'));
+    document.getElementById('huc-level-group').style.display = v === 'zonal' ? '' : 'none';
+    pushState();
+    if (!map.loaded()) return;
+    if (v === 'gridded') {
+      map.setLayoutProperty('swe',      'visibility', 'visible');
+      map.setLayoutProperty('huc-fill', 'visibility', 'none');
+      map.setLayoutProperty('huc-line', 'visibility', 'none');
+    } else {
+      setHucLayer(); // hides swe only after a successful load
+    }
+  }
+
+  // Wire up all segmented toggles and sync initial aria-pressed state
+  document.querySelectorAll('[data-view]').forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.view === currentView ? 'true' : 'false');
+    btn.addEventListener('click', () => setView(btn.dataset.view));
+  });
+  document.getElementById('huc-level-group').style.display = currentView === 'zonal' ? '' : 'none';
+  document.querySelectorAll('[data-huc]').forEach(btn => {
+    btn.setAttribute('aria-pressed', parseInt(btn.dataset.huc) === currentHucLevel ? 'true' : 'false');
+    btn.addEventListener('click', () => setHucLevel(parseInt(btn.dataset.huc)));
+  });
+
+  // ── Hover tooltip ─────────────────────────────────────────────────────────
+  const tooltip = document.getElementById('tooltip');
+  let _hoverSeq = 0;
+
+  function showTooltip(text, e) {
+    tooltip.textContent = text;
+    tooltip.classList.add('visible');
+    tooltip.style.left = `${e.originalEvent.clientX + 14}px`;
+    tooltip.style.top  = `${e.originalEvent.clientY + 14}px`;
+  }
+
+  map.on('mousemove', async (e) => {
+    const seq = ++_hoverSeq;
+
+    // In zonal view, prefer the HUC feature name + percentile (synchronous)
+    if (currentView === 'zonal') {
+      const hits = map.queryRenderedFeatures(e.point, { layers: ['huc-fill'] });
+      if (hits.length > 0) {
+        if (seq !== _hoverSeq) return;
+        const { name, huc } = hits[0].properties;
+        const label = name || `HUC${currentHucLevel} ${huc}`;
+        const zonalKey = `${currentDate}_${currentMethod}`;
+        const ptile = _zonalCache.has(zonalKey)
+          ? (_zonalCache.get(zonalKey).get(String(huc)) ?? null)
+          : null;
+        showTooltip(ptile != null ? `${label}: ${ordinal(Math.round(ptile))} percentile` : label, e);
+        return;
+      }
+    }
+
+    // Fall back to raster pixel query (async)
+    const value = await CogProtocol.queryValue(cogUrl(currentDate), e.lngLat.lng, e.lngLat.lat);
+    if (seq !== _hoverSeq) return;
+    if (value == null) tooltip.classList.remove('visible');
+    else showTooltip(`${ordinal(value)} percentile`, e);
+  });
+
+  map.on('mouseout', () => tooltip.classList.remove('visible'));
+
+  // Tap feedback for touch devices in zonal view
+  map.on('click', (e) => {
+    if (currentView !== 'zonal') return;
+    const hits = map.queryRenderedFeatures(e.point, { layers: ['huc-fill'] });
+    if (!hits.length) return;
+    const { name, huc } = hits[0].properties;
+    const label    = name || `HUC${currentHucLevel} ${huc}`;
+    const zonalKey = `${currentDate}_${currentMethod}`;
+    const ptile    = _zonalCache.has(zonalKey)
+      ? (_zonalCache.get(zonalKey).get(String(huc)) ?? null)
+      : null;
+    showToast(ptile != null ? `${label}: ${ordinal(Math.round(ptile))} percentile` : label);
+  });
+
+  // ── Share ─────────────────────────────────────────────────────────────────
+  document.getElementById('btn-share').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      showToast('Link copied to clipboard!');
+    } catch {
+      showToast('Could not copy — try selecting the URL bar directly');
+    }
+  });
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  let _logoImg = null; // MCO logo cached after first export
+
+  async function exportMap() {
+    showToast('Preparing export…');
+
+    // map.loaded() covers raster tiles AND GeoJSON workers (setData is async);
+    // areTilesLoaded() misses GeoJSON workers so we don't use it here.
+    if (!map.loaded()) {
+      await new Promise(r => map.once('idle', r));
+    }
+    // Fixed 1400×700 export at 2× — always 2800×1400 px regardless of viewport.
+    const DPR     = 2;
+    const px      = n => Math.round(n * DPR);
+    const W       = px(1400);
+    const TITLE_H = px(56);
+    const FOOT_H  = px(80);
+    const MAP_H   = px(700) - TITLE_H - FOOT_H;
+    const PAD     = px(20);
+    const dark    = document.documentElement.dataset.theme !== 'light';
+    const C = {
+      bg:     dark ? '#1e2530' : '#f0f2f5',
+      text:   dark ? '#e8ecf0' : '#1a1a2e',
+      muted:  dark ? '#8a99b0' : '#5a6070',
+      accent: '#1a6faf',
+    };
+
+    // Resize the map container to the exact export dimensions so the captured
+    // canvas matches without any stretching. Restore afterwards.
+    const container   = map.getContainer();
+    const savedWidth  = container.style.width;
+    const savedHeight = container.style.height;
+    const exportW_css = W   / DPR;          // 1400 CSS px
+    const exportH_css = MAP_H / DPR;        // 564 CSS px
+    container.style.visibility = 'hidden';
+    container.style.width  = exportW_css + 'px';
+    container.style.height = exportH_css + 'px';
+    map.resize();
+
+    // Wait for tiles that weren't in the original viewport to load and render.
+    map.triggerRepaint();
+    await new Promise(r => map.once('idle', r));
+
+    const mapCanvas = map.getCanvas();
+
+    // Load MCO logo with CORS. Falls back gracefully if CORS not allowed.
+    if (!_logoImg) {
+      _logoImg = await new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = 'https://climate.umt.edu/assets/images/MCO_logo_icon_only.png';
+      });
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = W;
+    canvas.height = TITLE_H + MAP_H + FOOT_H;
+    const ctx = canvas.getContext('2d');
+    await document.fonts.ready;
+
+    // ── Title band ──────────────────────────────────────────────────────────
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, W, TITLE_H);
+    ctx.fillStyle = C.accent;
+    ctx.fillRect(0, TITLE_H - px(2), W, px(2));
+
+    const logoSz = px(34);
+    if (_logoImg) ctx.drawImage(_logoImg, PAD, (TITLE_H - logoSz) / 2, logoSz, logoSz);
+    const textX = PAD + (_logoImg ? logoSz + px(10) : 0);
+
+    const viewLabel   = currentView === 'gridded' ? 'Gridded' : `Zonal · HUC${currentHucLevel}`;
+    const methodLabel = { zig: 'ZIG', ecdf: 'ECDF' }[currentMethod];
+
+    ctx.fillStyle = C.text;
+    ctx.font = `600 ${px(14)}px Outfit, system-ui, sans-serif`;
+    ctx.fillText('Snow Drought Explorer', textX, TITLE_H * 0.42);
+
+    ctx.fillStyle = C.muted;
+    ctx.font = `400 ${px(10)}px Outfit, system-ui, sans-serif`;
+    ctx.fillText(`${currentDate} · ${methodLabel} · ${viewLabel}`, textX, TITLE_H * 0.78);
+
+    ctx.textAlign = 'right';
+    ctx.font = `400 ${px(9)}px Outfit, system-ui, sans-serif`;
+    ctx.fillText('Montana Climate Office · climate.umt.edu', W - PAD, TITLE_H * 0.55);
+    ctx.textAlign = 'left';
+
+    // ── Map ──────────────────────────────────────────────────────────────────
+    ctx.drawImage(mapCanvas, 0, TITLE_H, W, MAP_H);
+
+    // Restore map container with a camera-flash effect.
+    container.style.width      = savedWidth;
+    container.style.height     = savedHeight;
+    container.style.visibility = '';
+    map.resize();
+    const flash = document.createElement('div');
+    flash.style.cssText = 'position:absolute;inset:0;background:#fff;opacity:0.85;pointer-events:none;z-index:999;transition:opacity 0.5s ease-out;';
+    container.appendChild(flash);
+    requestAnimationFrame(() => requestAnimationFrame(() => { flash.style.opacity = '0'; }));
+    flash.addEventListener('transitionend', () => flash.remove(), { once: true });
+
+    // ── Footer ───────────────────────────────────────────────────────────────
+    const footY = TITLE_H + MAP_H;
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, footY, W, FOOT_H);
+    ctx.fillStyle = C.accent;
+    ctx.fillRect(0, footY, W, px(2));
+
+    const prov  = await fetchProvenance(currentDate, currentMethod);
+    const midFY = footY + FOOT_H / 2;
+    ctx.textBaseline = 'middle';
+
+    // Left: title + method + date + ref period
+    ctx.fillStyle = C.text;
+    ctx.font = `600 ${px(9)}px Outfit, system-ui, sans-serif`;
+    ctx.fillText(`SWE PERCENTILE · ${methodLabel}`, PAD, midFY - px(14));
+    if (prov) {
+      const years = prov.reference_dates.map(d => d.slice(0, 4));
+      ctx.fillStyle = C.muted;
+      ctx.font = `400 ${px(7.5)}px 'Space Mono', monospace, system-ui`;
+      ctx.fillText(formatDate(prov.normals_date), PAD, midFY);
+      ctx.fillText(`${years[0]}\u2013${years[years.length - 1]}`, PAD, midFY + px(14));
+    }
+
+    // Right: attribution
+    ctx.textAlign = 'right';
+    ctx.fillStyle = C.muted;
+    ctx.font = `400 ${px(8)}px Outfit, system-ui, sans-serif`;
+    ctx.fillText('NOAA SNODAS · Montana Climate Office', W - PAD, midFY);
+    ctx.textAlign = 'left';
+
+    // Center: horizontal swatch legend — same style as sidebar, wide format
+    const swW   = px(14);
+    const swH   = px(12);
+    const swRad = px(3);
+    const swGap = px(5);  // swatch → label
+    const iGap  = px(10); // label → next swatch
+
+    ctx.font = `400 ${px(8)}px Outfit, system-ui, sans-serif`;
+    const legItems = BREAKS.map((lo, i) => {
+      const hi  = i + 1 < BREAKS.length ? BREAKS[i + 1] : null;
+      const lbl = lo === 0 ? `< ${hi}` : hi === null ? `\u2265 ${lo}` : `${lo}\u2013${hi}`;
+      return { color: COLORS[i], lbl, lw: ctx.measureText(lbl).width };
+    });
+    const legW = legItems.reduce((s, { lw }) => s + swW + swGap + lw, 0)
+               + (legItems.length - 1) * iGap;
+
+    let lx = Math.round((W - legW) / 2);
+    const swY = footY + (FOOT_H - swH) / 2;
+    for (const { color, lbl, lw } of legItems) {
+      ctx.fillStyle = `rgb(${color})`;
+      ctx.beginPath();
+      ctx.roundRect(lx, swY, swW, swH, swRad);
+      ctx.fill();
+      ctx.fillStyle = C.text;
+      ctx.fillText(lbl, lx + swW + swGap, swY + swH / 2);
+      lx += swW + swGap + lw + iGap;
+    }
+    ctx.textBaseline = 'alphabetic';
+
+    // ── Download ────────────────────────────────────────────────────────────
+    canvas.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = `snodas-swe-ptile-${currentDate}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      showToast('Exported!');
+    });
+  }
+
+  document.getElementById('btn-export').addEventListener('click', exportMap);
+
+  // ── Info modal ────────────────────────────────────────────────────────────
+  const infoModal = document.getElementById('info-modal');
+
+  let _infoOpener = null;
+  document.getElementById('btn-info').addEventListener('click', () => {
+    _infoOpener = document.activeElement;
+    infoModal.showModal();
+  });
+  document.getElementById('btn-info-close').addEventListener('click', () => infoModal.close());
+  infoModal.addEventListener('click', (e) => { if (e.target === infoModal) infoModal.close(); });
+  infoModal.addEventListener('keydown', (e) => { if (e.key === 'Escape') infoModal.close(); });
+  infoModal.addEventListener('close', () => { _infoOpener?.focus(); _infoOpener = null; });
+
+  // Show on first visit
+  try {
+    if (!localStorage.getItem('mco-snodas-info-seen')) {
+      infoModal.showModal();
+      localStorage.setItem('mco-snodas-info-seen', '1');
+    }
+  } catch {}
+
+  // ── Provenance modal ──────────────────────────────────────────────────────
+  const provenanceModal = document.getElementById('provenance-modal');
+
+  const FLAVOR_DESC = {
+    zig:  'Percentiles are estimated using a zero-inflated gamma distribution fit by L-moments, which smooths over sparse historical records and can extrapolate beyond observed extremes.',
+    ecdf: 'Percentiles are estimated by linearly interpolating the empirical CDF of positive reference-year values, making no distributional assumptions beyond the observed data.',
+  };
+
+  function showProvenance(prov) {
+    if (!prov) return;
+    const methodLabel = { zig: 'ZIG', ecdf: 'ECDF' }[prov.flavor] || prov.flavor;
+    document.getElementById('provenance-modal-subtitle').textContent =
+      `${formatDate(prov.normals_date)} · ${methodLabel}`;
+
+    const years    = prov.reference_dates.map(d => d.slice(0, 4));
+    const refRange = `${years[0]}\u2013${years[years.length - 1]}`;
+    const computedAt = new Date(prov.computed_at).toLocaleString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    });
+    const datesHtml = prov.reference_dates
+      .map(d => `<span>${formatDate(d)}</span>`).join('');
+
+    const hucDesc = currentView === 'zonal'
+      ? `Watershed boundaries are from the <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset" target="_blank" rel="noopener">USGS Watershed Boundary Dataset</a> (WBD), aggregated to HUC${currentHucLevel}.`
+      : `Watershed boundaries are from the <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset" target="_blank" rel="noopener">USGS Watershed Boundary Dataset</a> (WBD), available at HUC levels 2, 4, 6, and 8.`;
+
+    document.getElementById('provenance-content').innerHTML = `
+      <div class="info-section">
+        <h3>Gridded data</h3>
+        <p><a href="https://nsidc.org/data/g02158" target="_blank" rel="noopener">NOAA SNODAS</a> (Snow Data Assimilation System) provides daily ~1&thinsp;km gridded Snow Water Equivalent estimates for the contiguous United States, available from 2004 to present.</p>
+      </div>
+      <div class="info-section">
+        <h3>Zonal data</h3>
+        <p>${hucDesc}</p>
+      </div>
+      <div class="info-section">
+        <h3>${methodLabel} method</h3>
+        <p>${FLAVOR_DESC[prov.flavor] || ''}</p>
+      </div>
+      <div class="info-section">
+        <h3>Reference period</h3>
+        <p>${prov.n_reference_years} SNODAS dates spanning ${refRange}.</p>
+      </div>
+      <div class="info-section">
+        <h3>Reference dates</h3>
+        <div class="provenance-dates">${datesHtml}</div>
+      </div>
+      <div class="info-section">
+        <h3>Computed</h3>
+        <p>${computedAt}</p>
+      </div>`;
+
+    provenanceModal.showModal();
+  }
+
+  let _provenanceOpener = null;
+  document.getElementById('legend-info-btn').addEventListener('click', () => {
+    _provenanceOpener = document.activeElement;
+    fetchProvenance(currentDate, currentMethod).then(showProvenance);
+  });
+  document.getElementById('btn-provenance-close').addEventListener('click', () => provenanceModal.close());
+  provenanceModal.addEventListener('click', (e) => { if (e.target === provenanceModal) provenanceModal.close(); });
+  provenanceModal.addEventListener('close', () => { _provenanceOpener?.focus(); _provenanceOpener = null; });
+
+
+})().catch(e => console.error('[init]', e));
+</script>
+</body>
+</html>
