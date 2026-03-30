@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Snow Drought Explorer · Montana Climate Office</title>
+  <title>Snowpack Explorer · Montana Climate Office</title>
   <meta name="description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
 
   <!-- Open Graph -->
   <meta property="og:type"        content="website">
-  <meta property="og:site_name"   content="Snow Drought Explorer">
-  <meta property="og:title"       content="Snow Drought Explorer">
+  <meta property="og:site_name"   content="Snowpack Explorer">
+  <meta property="og:title"       content="Snowpack Explorer">
   <meta property="og:description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
   <meta property="og:url"         content="https://snow.climate.umt.edu">
 
@@ -399,7 +399,7 @@
   <div class="nav-divider" aria-hidden="true"></div>
 
   <div class="brand">
-    <span class="brand-title">Snow Drought Explorer</span>
+    <span class="brand-title">Snowpack Explorer</span>
     <span class="brand-subtitle">A service of the Montana Climate Office</span>
   </div>
 
@@ -523,7 +523,7 @@
   <div class="info-modal-box">
     <div class="info-modal-header">
       <div>
-        <div class="info-modal-title" id="info-modal-title">Snow Drought Explorer</div>
+        <div class="info-modal-title" id="info-modal-title">Snowpack Explorer</div>
         <div class="info-modal-subtitle">Montana Climate Office</div>
       </div>
       <button class="modal-close" id="btn-info-close" aria-label="Close">×</button>
@@ -531,7 +531,7 @@
 
     <div class="info-section">
       <h3>About</h3>
-      <p>The Snow Drought Explorer maps daily <strong>Snow Water Equivalent (SWE) percentiles</strong>
+      <p>The Snowpack Explorer maps daily <strong>Snow Water Equivalent (SWE) percentiles</strong>
          across the contiguous United States, comparing current snowpack to the same calendar day
          across all available historical years. Values near <strong>0</strong> indicate historically
          low snowpack; values near <strong>100</strong> indicate historically high snowpack.</p>
@@ -700,7 +700,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
       params.zoom = map.getZoom().toFixed(2);
     } catch {}  // map not yet initialized on first call
     history.replaceState(null, '', `?${new URLSearchParams(params)}`);
-    document.title = `Snow Drought Explorer · ${currentDate} · Montana Climate Office`;
+    document.title = `Snowpack Explorer · ${currentDate} · Montana Climate Office`;
   }
 
   // ── Toast ─────────────────────────────────────────────────────────────────
@@ -1221,7 +1221,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
     ctx.fillStyle = C.text;
     ctx.font = `600 ${px(14)}px Outfit, system-ui, sans-serif`;
-    ctx.fillText('Snow Drought Explorer', textX, TITLE_H * 0.42);
+    ctx.fillText('Snowpack Explorer', textX, TITLE_H * 0.42);
 
     ctx.fillStyle = C.muted;
     ctx.font = `400 ${px(10)}px Outfit, system-ui, sans-serif`;

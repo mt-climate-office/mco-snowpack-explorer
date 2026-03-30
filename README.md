@@ -1,4 +1,4 @@
-# Snow Drought Explorer
+# Snowpack Explorer
 
 An interactive map explorer for daily snow data derived from the [NOAA SNODAS](https://nsidc.org/data/g02158) product, processed by the [Montana Climate Office](https://climate.umt.edu).
 
@@ -6,7 +6,7 @@ An interactive map explorer for daily snow data derived from the [NOAA SNODAS](h
 
 ## About
 
-The Snow Drought Explorer visualizes snowpack conditions across the western United States using Cloud Optimized GeoTIFFs (COGs) served as raster tiles in [MapLibre GL JS](https://maplibre.org). Data are processed and hosted by the Montana Climate Office at the University of Montana.
+The Snowpack Explorer visualizes snowpack conditions across the western United States using Cloud Optimized GeoTIFFs (COGs) served as raster tiles in [MapLibre GL JS](https://maplibre.org). Data are processed and hosted by the Montana Climate Office at the University of Montana.
 
 ## Development
 
