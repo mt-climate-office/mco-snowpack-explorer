@@ -71,6 +71,39 @@
       --shadow:         0 4px 24px rgba(0,0,0,0.1);
     }
 
+    /* ── Map controls (MapLibre navigation buttons) ─────────────────────── */
+    .maplibregl-ctrl-group {
+      background: var(--glass) !important;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border) !important;
+      border-radius: var(--radius-md) !important;
+      box-shadow: var(--shadow) !important;
+      transition: background var(--transition), border-color var(--transition);
+    }
+    .maplibregl-ctrl-group button {
+      background: transparent !important;
+      border-color: var(--border) !important;
+      transition: background var(--transition);
+    }
+    .maplibregl-ctrl-group button:hover {
+      background: var(--accent-hover) !important;
+    }
+    .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+      filter: var(--ctrl-icon-filter, none);
+    }
+    :root { --ctrl-icon-filter: invert(1); }
+    [data-theme="light"] { --ctrl-icon-filter: none; }
+    .maplibregl-ctrl-attrib {
+      background: var(--glass) !important;
+      color: var(--text-muted) !important;
+      transition: background var(--transition), color var(--transition);
+    }
+    .maplibregl-ctrl-attrib a { color: var(--text-secondary) !important; }
+    .maplibregl-ctrl-attrib button.maplibregl-ctrl-attrib-button {
+      filter: var(--ctrl-icon-filter, none);
+    }
+
     /* ── Reset & base ──────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -727,6 +760,13 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem('mco-theme', next); } catch {}
     syncThemeIcons();
+    map.setStyle(stadiaStyleUrl());
+    map.once('style.load', () => {
+      addCustomLayers();
+      // The HUC source was recreated empty — force a full reload
+      _hucSourceLevel = null;
+      if (currentView === 'zonal') setHucLayer();
+    });
   });
 
   // ── Legend ────────────────────────────────────────────────────────────────
@@ -797,12 +837,18 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   const FIT_OPTS       = { padding: 20 };
   let _fitZoom;
 
+  function stadiaStyleUrl() {
+    const variant = document.documentElement.dataset.theme === 'dark'
+      ? 'stamen_toner' : 'stamen_toner_lite';
+    return `https://tiles.stadiamaps.com/styles/${variant}.json?api_key=${STADIA_API_KEY}`;
+  }
+
   // Pre-fetch COG metadata in parallel with the Stadia style loading
   CogProtocol.preload(cogUrl(currentDate));
 
   const map = new maplibregl.Map({
     container: 'map',
-    style: `https://tiles.stadiamaps.com/styles/stamen_toner_lite.json?api_key=${STADIA_API_KEY}`,
+    style: stadiaStyleUrl(),
     ...(_hasInitPos
       ? { center: [_initLng, _initLat], zoom: _initZoom }
       : { bounds: COG_BOUNDS, fitBoundsOptions: FIT_OPTS }),
@@ -811,62 +857,86 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-  map.on('load', () => {
-    _fitZoom = map.cameraForBounds(COG_BOUNDS, FIT_OPTS).zoom;
-
-    // Insert our layers below the first symbol (label) layer so text stays on top
+  // Add custom sources and layers in the correct z-order.
+  // Called on initial load and after each basemap style swap.
+  function addCustomLayers() {
     const before = map.getStyle().layers.find(l => l.type === 'symbol')?.id;
 
     // Hillshade
-    map.addSource('dem', {
-      type: 'raster-dem',
-      url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${MAPTILER_KEY}`,
-      tileSize: 256,
-      attribution: '© <a href="https://www.maptiler.com/copyright/">MapTiler</a>',
-    });
-    map.addLayer({
-      id: 'hillshade', type: 'hillshade', source: 'dem',
-      paint: { 'hillshade-exaggeration': 0.35 },
-    }, before);
+    if (!map.getSource('dem')) {
+      map.addSource('dem', {
+        type: 'raster-dem',
+        url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${MAPTILER_KEY}`,
+        tileSize: 256,
+        attribution: '© <a href="https://www.maptiler.com/copyright/">MapTiler</a>',
+      });
+    }
+    if (!map.getLayer('hillshade')) {
+      map.addLayer({
+        id: 'hillshade', type: 'hillshade', source: 'dem',
+        paint: { 'hillshade-exaggeration': 0.35 },
+      }, before);
+    }
 
-    // HUC zonal layers — empty until a level is selected
+    // HUC zonal layers
     // Layer order (back→front): swe → huc-fill → hillshade → huc-line → labels
-    map.addSource('huc', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    map.addLayer({
-      id: 'huc-fill', type: 'fill', source: 'huc',
-      layout: { visibility: 'none' },
-      paint: {
-        'fill-color': ['case',
-          ['==', ['feature-state', 'swe_ptile'], null], 'rgb(128,128,128)',
-          ['step', ['feature-state', 'swe_ptile'], `rgb(${COLORS[0]})`, ...HUC_COLOR_STOPS],
-        ],
-        'fill-opacity': ['case', ['==', ['feature-state', 'swe_ptile'], null], 0.1, 0.85],
-      },
-    }, 'hillshade');
-    map.addLayer({
-      id: 'huc-line', type: 'line', source: 'huc',
-      layout: { visibility: 'none' },
-      paint: { 'line-color': '#333', 'line-width': 0.7, 'line-opacity': 0.7 },
-    }, before);
+    if (!map.getSource('huc')) {
+      map.addSource('huc', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    }
+    if (!map.getLayer('huc-fill')) {
+      map.addLayer({
+        id: 'huc-fill', type: 'fill', source: 'huc',
+        layout: { visibility: 'none' },
+        paint: {
+          'fill-color': ['case',
+            ['==', ['feature-state', 'swe_ptile'], null], 'rgb(128,128,128)',
+            ['step', ['feature-state', 'swe_ptile'], `rgb(${COLORS[0]})`, ...HUC_COLOR_STOPS],
+          ],
+          'fill-opacity': ['case', ['==', ['feature-state', 'swe_ptile'], null], 0.1, 0.85],
+        },
+      }, 'hillshade');
+    }
+    if (!map.getLayer('huc-line')) {
+      map.addLayer({
+        id: 'huc-line', type: 'line', source: 'huc',
+        layout: { visibility: 'none' },
+        paint: { 'line-color': '#333', 'line-width': 0.7, 'line-opacity': 0.7 },
+      }, before);
+    }
 
     // SWE COG — sits below HUC fills
-    map.addSource('swe', {
-      type: 'raster',
-      tiles: [`cog://ptile/${cogUrl(currentDate)}/{z}/{x}/{y}`],
-      tileSize: 256, minzoom: 2, maxzoom: 14,
-      attribution: 'NOAA SNODAS | Montana Climate Office',
-    });
-    map.addLayer({
-      id: 'swe', type: 'raster', source: 'swe',
-      paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 },
-    }, 'huc-fill');
+    if (!map.getSource('swe')) {
+      map.addSource('swe', {
+        type: 'raster',
+        tiles: [`cog://ptile/${cogUrl(currentDate)}/{z}/{x}/{y}`],
+        tileSize: 256, minzoom: 2, maxzoom: 14,
+        attribution: 'NOAA SNODAS | Montana Climate Office',
+      });
+    }
+    if (!map.getLayer('swe')) {
+      map.addLayer({
+        id: 'swe', type: 'raster', source: 'swe',
+        paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 },
+      }, 'huc-fill');
+    }
+
+    // Restore visibility for current view
+    map.setLayoutProperty('swe', 'visibility', currentView === 'gridded' ? 'visible' : 'none');
+    const zonalVis = currentView === 'zonal' ? 'visible' : 'none';
+    map.setLayoutProperty('huc-fill', 'visibility', zonalVis);
+    map.setLayoutProperty('huc-line', 'visibility', zonalVis);
+  }
+
+  map.on('load', () => {
+    _fitZoom = map.cameraForBounds(COG_BOUNDS, FIT_OPTS).zoom;
+
+    addCustomLayers();
 
     // Apply initial view state.
     // Build _initReady: a promise that resolves only when the first data layer
     // is genuinely ready to render (geometry + colors applied).
     //   • Zonal  → await setHucLayer() (FGB fetch + parquet + feature states)
     //   • Gridded → triggerRepaint to issue COG tile requests, then await idle
-    map.setLayoutProperty('swe', 'visibility', currentView === 'gridded' ? 'visible' : 'none');
     const _initReady = currentView === 'zonal'
       ? setHucLayer()
       : new Promise(r => { map.triggerRepaint(); map.once('idle', r); });
