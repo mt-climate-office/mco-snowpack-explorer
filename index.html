@@ -652,9 +652,9 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   // ── Constants ────────────────────────────────────────────────────────────
   const SNODAS_START = '2004-01-01';
-  const S3_ROOT    = 'https://mco-snodas.s3.us-west-2.amazonaws.com/normals/gridded';
-  const FGB_ROOT   = 'https://mco-snodas.s3.us-west-2.amazonaws.com/cache/data/fgb';
-  const ZONAL_ROOT = 'https://mco-snodas.s3.us-west-2.amazonaws.com/normals/zonal/wbd';
+  const S3_ROOT    = 'https://d1s8jav5n0eyyf.cloudfront.net/snodas/normals/gridded';
+  const FGB_ROOT   = 'https://d1s8jav5n0eyyf.cloudfront.net/snodas/cache/data/fgb';
+  const ZONAL_ROOT = 'https://d1s8jav5n0eyyf.cloudfront.net/snodas/normals/zonal/wbd';
   const BREAKS  = [0, 2, 5, 10, 20, 30, 70, 80, 90, 95, 98];
   const COLORS  = [
     [115,  0,   0], // D4 exceptional drought
@@ -932,6 +932,9 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
     addCustomLayers();
 
+    // Preload all FGB boundary files in the background so zonal view is instant
+    preloadFgb();
+
     // Apply initial view state.
     // Build _initReady: a promise that resolves only when the first data layer
     // is genuinely ready to render (geometry + colors applied).
@@ -1054,6 +1057,23 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
       return res;
     } catch {
       return fetch(url);
+    }
+  }
+
+  // Preload all FGB boundary files into memory + Cache API in the background
+  function preloadFgb() {
+    for (const lvl of [2, 4, 6, 8]) {
+      if (_fgbCache.has(lvl)) continue;
+      (async () => {
+        try {
+          const res = await fetchCached(fgbUrl(lvl));
+          if (!res.ok) return;
+          const features = [];
+          for await (const f of flatgeobuf.deserialize(res.body))
+            features.push({ ...f, id: f.properties.huc });
+          _fgbCache.set(lvl, features);
+        } catch { /* silent — will retry on demand */ }
+      })();
     }
   }
 
