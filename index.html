@@ -718,9 +718,22 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   async function cogExists(d) {
     try {
-      const r = await fetch(cogUrl(d), { method: 'GET', headers: { Range: 'bytes=0-3' } });
-      return r.ok || r.status === 206;
+      const r = await fetch(cogUrl(d), { method: 'HEAD' });
+      return r.ok;
     } catch { return false; }
+  }
+
+  // Walk backwards from the given date to find the most recent date with data.
+  // Returns the original date if it has data, otherwise tries up to `maxDays` prior dates.
+  async function findLatestAvailable(startDate, maxDays = 30) {
+    const d = new Date(startDate + 'T00:00:00');
+    for (let i = 0; i < maxDays; i++) {
+      const iso = d.toISOString().slice(0, 10);
+      if (iso < SNODAS_START) break;
+      if (await cogExists(iso)) return iso;
+      d.setDate(d.getDate() - 1);
+    }
+    return null;
   }
 
   function pushState() {
@@ -927,8 +940,21 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     map.setLayoutProperty('huc-line', 'visibility', zonalVis);
   }
 
-  map.on('load', () => {
+  map.on('load', async () => {
     _fitZoom = map.cameraForBounds(COG_BOUNDS, FIT_OPTS).zoom;
+
+    // Validate initial date — today's data may not be processed yet.
+    if (!(await cogExists(currentDate))) {
+      const fallback = await findLatestAvailable(currentDate);
+      if (fallback) {
+        currentDate = fallback;
+        dateInput.value = currentDate;
+        showToast(`Showing latest available: ${currentDate}`);
+      } else {
+        showToast('No recent SNODAS data found');
+      }
+      pushState();
+    }
 
     addCustomLayers();
 
@@ -987,11 +1013,15 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     if (d > todayMT())    { d = todayMT();     showToast(`No future dates available`); }
     if (d === currentDate) { dateInput.value = d; return; }
 
-    const ok = await cogExists(d);
-    if (!ok) {
-      showToast(`No SNODAS data found for ${d}`);
-      dateInput.value = currentDate;
-      return;
+    if (!(await cogExists(d))) {
+      const fallback = await findLatestAvailable(d);
+      if (!fallback || fallback === currentDate) {
+        showToast(`No SNODAS data found near ${d}`);
+        dateInput.value = currentDate;
+        return;
+      }
+      d = fallback;
+      showToast(`Showing latest available: ${d}`);
     }
 
     currentDate = d;
