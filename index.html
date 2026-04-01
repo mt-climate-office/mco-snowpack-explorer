@@ -718,8 +718,11 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   async function cogExists(d) {
     try {
-      const r = await fetch(cogUrl(d), { method: 'HEAD' });
-      return r.ok;
+      const r = await fetch(cogUrl(d), { method: 'GET', headers: { Range: 'bytes=0-3' } });
+      if (!r.ok && r.status !== 206) return false;
+      const buf = new Uint8Array(await r.arrayBuffer());
+      // Valid TIFF starts with 'II' (0x49 0x49) or 'MM' (0x4D 0x4D)
+      return buf.length >= 2 && ((buf[0] === 0x49 && buf[1] === 0x49) || (buf[0] === 0x4D && buf[1] === 0x4D));
     } catch { return false; }
   }
 
