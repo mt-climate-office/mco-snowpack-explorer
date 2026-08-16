@@ -17,3 +17,12 @@ dist/
 
 # Build artifacts
 *.log
+
+# Ephemeral verification tooling (MIGRATING.md § verification recipe).
+# Installed with `npm i --no-save`, run before a deploy, never committed —
+# the app itself ships no build step and no dependencies.
+node_modules/
+package.json
+package-lock.json
+verify.mjs
+verify-out/
