@@ -75,8 +75,8 @@
   <!-- House fonts: kit-hosted (mco-web-style 0.7.0), declared in mco-theme.css.
        Preloaded so the first frame is already in Outfit — no system-font flash.
        Same @version as the theme CSS; crossorigin is required on font preloads. -->
-  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.0/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.0/fonts/space-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/fonts/space-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css"
         integrity="sha384-q7EDwLXBfakVimqzBJqFCTxpgy7B18buhebV158qkVMCEVAaUnU3fQTEfWgYz+7g"
         crossorigin="anonymous">
@@ -84,8 +84,8 @@
   <!-- mco-web-style @0.6.0 — tokens, reset, a11y utilities, navbar/panel/toast/
        tooltip/modal shells, MapLibre control polish, and the high-contrast
        theme this page had no values for. -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.0/theme/mco-theme.css"
-        integrity="sha384-ZhJv93Wa+kWlQTfY8SIMNf5nXoVvIF9s/SMQHCimI5xHu7SvscGgts5EpuWSkkdz"
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/theme/mco-theme.css"
+        integrity="sha384-dktZyfU+lLz1JEFe+npkBVrH8FsSdtYYOPC7bJQtZwEJnvD3IiENV+UUgyXeFpnl"
         crossorigin="anonymous">
 
   <style>
@@ -195,7 +195,7 @@
 
     .legend-sub { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; }
     #legend-meta {
-      font-family: 'Space Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 0.65rem; color: var(--text-dim);
       line-height: 1.5; margin-bottom: 8px;
     }
@@ -206,7 +206,7 @@
     /* ── Provenance modal ───────────────────────────────────────────────────── */
     .provenance-dates {
       display: flex; flex-wrap: wrap; gap: 3px 14px;
-      font-family: 'Space Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 0.68rem; color: var(--text-secondary);
       margin-top: 0.4rem;
     }
@@ -483,13 +483,13 @@
      module below and MCO / MCO.map are already globals by the time it does.
      cog-protocol.js is the KIT's copy now; the local file was byte-identical.
      SRI hashes are the kit README's table for this exact tag. -->
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.0/core/mco-core.js"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/core/mco-core.js"
         integrity="sha384-ZOGCREEJsO8sY1wJ7eS/Q7K7NdZAHF+LxSMoO3ZGqBtEVISX3616cGomCW418hXH"
         crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.0/map/mco-map.js"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/map/mco-map.js"
         integrity="sha384-0aF67+MSXmcocGs8r3qiehgDNzgXo9F48olS5OX575wO2llw2cuGcqLpd6+L7D76"
         crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.0/map/cog-protocol.js"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/map/cog-protocol.js"
         integrity="sha384-9hkbnrwnT71VgTqMFjTM8g3GFmvQH1z24Z9gvSAeCxF4YeuTS3lL3PMQTjWelFZm"
         crossorigin="anonymous"></script>
 
