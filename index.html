@@ -296,6 +296,11 @@
     }
     /* Step 3 — allow wrapping below portrait-phone width */
     @media (max-width: 640px)  { .nav-btn.date-step { height: 22px; } }
+    /* Rail drawer (kit 0.10.0; MCO.viewport.RAIL_MQ): the drawer has room, so
+       the control labels this bar sheds from 1400px down come back there. */
+    @media (max-height: 560px) and (orientation: landscape) {
+      .mco-navbar[data-rail] .mco-nav-drawer .control-label { display: inline; }
+    }
     /* Above 641px keep controls on one line */
     @media (min-width: 641px)  { #navbar { flex-wrap: nowrap; } .controls { flex-wrap: nowrap; } }
   </style>
@@ -305,14 +310,27 @@
 <!-- WCAG 2.4.1 — first focusable element, jumps past the navbar to the map. -->
 <a class="mco-skip-link" href="#main">Skip to map</a>
 
-<header id="navbar" class="mco-navbar">
+<!-- data-rail (kit 0.10.0): on a landscape phone the one-row bar can't hold
+     the zonal controls (the theme and info buttons sat off-screen at 750×342),
+     so it becomes a 56px left rail and .mco-nav-drawer holds the rest
+     (MCO.initNavRail). Outside rail mode the drawer is display:contents and
+     the bar lays out exactly as before. -->
+<header id="navbar" class="mco-navbar" data-rail>
   <a href="https://climate.umt.edu" target="_blank" rel="noopener noreferrer"
      class="logo-link" aria-label="Montana Climate Office">
     <img src="assets/mco-logo.png" alt="" class="logo-img" width="40" height="40">
   </a>
 
+  <div class="mco-rail">
+    <button type="button" class="nav-btn icon-only" id="btn-rail-menu" aria-label="Menu"
+            aria-controls="nav-drawer" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+  </div>
+
   <div class="nav-divider" aria-hidden="true"></div>
 
+  <div class="mco-nav-drawer" id="nav-drawer">
   <div class="brand">
     <h1 class="brand-title">Snowpack Explorer</h1>
     <span class="brand-subtitle">A service of the Montana Climate Office</span>
@@ -408,7 +426,9 @@
 
     <button class="nav-btn" id="btn-info" aria-label="About this map">?</button>
   </div>
+  </div>
 </header>
+<div class="mco-scrim" id="rail-scrim" aria-hidden="true" hidden></div>
 
 <main id="main" tabindex="-1">
   <div id="map" role="application" aria-label="SWE Percentile Map"></div>

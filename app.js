@@ -923,12 +923,29 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   document.getElementById('btn-export').addEventListener('click', exportMap);
 
+  // ── Nav rail (kit 0.10.0) ─────────────────────────────────────────────────
+  // Landscape phones: the bar becomes a left rail; its menu button opens the
+  // drawer with the controls (focus in, page inert, Esc / scrim back to it).
+  const rail = MCO.initNavRail({
+    toggle: document.getElementById('btn-rail-menu'),
+    drawer: document.getElementById('nav-drawer'),
+    scrim:  document.getElementById('rail-scrim'),
+  });
+
   // ── Info modal ────────────────────────────────────────────────────────────
   const infoModal = document.getElementById('info-modal');
 
   let _infoOpener = null;
   document.getElementById('btn-info').addEventListener('click', () => {
     _infoOpener = document.activeElement;
+    // In rail mode the info button lives in the nav drawer, which makes the
+    // rest of the page inert while open: close it first (focus does not go
+    // back to the toggle — the dialog takes it), and return focus to the
+    // rail's menu button, since the closed drawer's buttons are display:none.
+    if (rail.isOpen()) {
+      rail.close({ restoreFocus: false });
+      _infoOpener = document.getElementById('btn-rail-menu');
+    }
     infoModal.showModal();
   });
   document.getElementById('btn-info-close').addEventListener('click', () => infoModal.close());
