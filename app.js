@@ -730,14 +730,16 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
     const mapCanvas = map.getCanvas();
 
-    // Load MCO logo with CORS. Falls back gracefully if CORS not allowed.
+    // The vendored navbar logo (same origin, so it never taints the canvas).
+    // This used to hot-link climate.umt.edu, which the page's CSP img-src has
+    // never allowed — every export since the 0.6.0 migration silently drew
+    // no logo, with only a CSP console line to show for it.
     if (!_logoImg) {
       _logoImg = await new Promise(resolve => {
         const img = new Image();
-        img.crossOrigin = 'anonymous';
         img.onload  = () => resolve(img);
         img.onerror = () => resolve(null);
-        img.src = 'https://climate.umt.edu/assets/images/MCO_logo_icon_only.png';
+        img.src = 'assets/mco-logo.png';
       });
     }
 
