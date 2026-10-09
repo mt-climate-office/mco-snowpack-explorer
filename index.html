@@ -307,6 +307,7 @@
     /* Rail drawer (kit 0.10.0; MCO.viewport.RAIL_MQ): the drawer has room, so
        the control labels this bar sheds from 1400px down come back there. */
     @media (max-height: 560px) and (orientation: landscape) {
+      /* kit-override: undoes this app's own ≤1400px display:none label shed. */
       .mco-navbar[data-rail] .mco-nav-drawer .control-label { display: inline; }
     }
     /* Above 641px keep controls on one line */
