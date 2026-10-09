@@ -184,10 +184,13 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     button:   document.getElementById('btn-theme'),
     iconSun:  document.getElementById('icon-sun'),
     iconMoon: document.getElementById('icon-moon'),
-    // The style.load listener below re-adds the data layers after any style
-    // swap, so a theme change only has to swap the style.
-    onChange: () => map.setStyle(MCO.map.cartoStyleUrl()),
   });
+  // Any theme flip — this button or anything else calling MCO.setTheme —
+  // restyles the basemap (kit 0.9.0 event; was the toggle's onChange, which
+  // only saw this one button). The style.load listener below re-adds the
+  // data layers, so the listener only swaps the style. MapLibre has been
+  // awaited above, and the map exists before any user can flip the theme.
+  document.addEventListener('mco:themechange', () => map.setStyle(MCO.map.cartoStyleUrl()));
 
   // ── Legend ────────────────────────────────────────────────────────────────
   const legendRowsEl = document.getElementById('legend-rows');
