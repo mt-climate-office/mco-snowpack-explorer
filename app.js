@@ -345,6 +345,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
         showToast('No recent SNODAS data found');
       }
       pushState();
+      stepper.refresh();   // the fallback moved the date off its upper bound
     }
 
     addCustomLayers();
@@ -426,30 +427,25 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     CogProtocol.preload(cogUrl(currentDate));
     refreshLayers();
     fetchProvenance(currentDate, currentMethod).then(updateLegendMeta);
+    stepper.refresh();
   }
 
   dateInput.addEventListener('change', () => setDate(dateInput.value));
 
-  // Stepper with hold-to-repeat
-  function makeStepper(btnId, delta) {
-    const btn = document.getElementById(btnId);
-    let timeout, interval;
-    const step = () => {
-      const d = new Date(`${currentDate}T12:00:00`);
-      d.setDate(d.getDate() + delta);
-      setDate(d.toISOString().slice(0, 10));
-    };
-    const start = () => {
-      step();
-      timeout = setTimeout(() => { interval = setInterval(step, 120); }, 450);
-    };
-    const stop = () => { clearTimeout(timeout); clearInterval(interval); };
-    btn.addEventListener('mousedown', start);
-    btn.addEventListener('touchstart', (e) => { e.preventDefault(); start(); }, { passive: false });
-    ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(ev => btn.addEventListener(ev, stop));
-  }
-  makeStepper('btn-date-next', +1);
-  makeStepper('btn-date-prev', -1);
+  // Date stepper — the kit's (0.9.0). The hand-rolled one listened only for
+  // mousedown/touchstart, so Enter and Space on a focused stepper did nothing
+  // (WCAG 2.1.1). MCO.initStepper steps on click (keyboard included), repeats
+  // while a pointer is held, and disables a button at its bound. The new date
+  // is announced, since the change is otherwise visible only on the map.
+  const stepper = MCO.initStepper({
+    prev: document.getElementById('btn-date-prev'),
+    next: document.getElementById('btn-date-next'),
+    onStep: (d) => {
+      setDate(MCO.shiftDate(currentDate, d))
+        .then(() => MCO.announce(`Showing ${formatDate(currentDate)}`));
+    },
+    canStep: (d) => (d < 0 ? currentDate > SNODAS_START : currentDate < todayMT()),
+  });
 
   // ── Method toggle ─────────────────────────────────────────────────────────
   function setMethod(m) {
