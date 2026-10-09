@@ -555,12 +555,13 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
       // ── Step 4: push swe_ptile as feature state (no geometry re-upload) ──
       const zonalData = _zonalCache.get(key);
+      const rows = [];
       for (const f of _fgbCache.get(currentHucLevel)) {
-        map.setFeatureState(
-          { source: 'huc', id: f.id },
-          { swe_ptile: zonalData.get(String(f.properties.huc)) ?? null }
-        );
+        const ptile = zonalData.get(String(f.properties.huc)) ?? null;
+        map.setFeatureState({ source: 'huc', id: f.id }, { swe_ptile: ptile });
+        rows.push({ id: String(f.properties.huc), name: f.properties.name, huc: f.properties.huc, ptile });
       }
+      renderTwin(rows);
 
       map.setLayoutProperty('huc-fill', 'visibility', 'visible');
       map.setLayoutProperty('huc-line', 'visibility', 'visible');
@@ -570,6 +571,35 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
       showToast('Failed to load basin data');
     }
   }
+
+  // ── Table twin (HOUSE-STYLE §5.2) ─────────────────────────────────────────
+  // The zonal view is canvas data: the twin gives a screen-reader user every
+  // drawn watershed and its percentile (the kit caps it at 500 rows; HUC8 has
+  // more, and the overflow row says so). The gridded raster has no tabular
+  // form — its AT path is the click-to-pin reading — so the twin is empty
+  // there and the map's label says which applies.
+  const mapEl = document.getElementById('map');
+  const twin = MCO.srTable({
+    caption: 'Watershed SWE percentiles',
+    columns: [
+      { key: 'name', label: 'Watershed', rowHeader: true },
+      { key: 'huc', label: 'HUC code' },
+      { key: 'ptile', label: 'SWE percentile', value: (r) => (r.ptile == null ? 'no data' : ordinal(Math.round(r.ptile))) },
+    ],
+    overflowText: (n) => `…and ${n} more watersheds. Choose a coarser HUC level to list them all.`,
+  });
+  function renderTwin(rows) {
+    if (rows) rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    twin.render(rows || []);
+    const methodLabel = { zig: 'ZIG', ecdf: 'ECDF' }[currentMethod];
+    twin.element.querySelector('caption').textContent = rows
+      ? `Watershed SWE percentiles, HUC${currentHucLevel}, ${currentDate}, ${methodLabel} (${rows.length})`
+      : 'Watershed SWE percentiles: shown in the zonal view only (0)';
+    mapEl.setAttribute('aria-label', rows
+      ? `SWE percentile map, zonal view, HUC${currentHucLevel}. The data is in the table that follows.`
+      : 'SWE percentile map, gridded view. Click or tap the map to hear the percentile at that point.');
+  }
+  if (currentView !== 'zonal') renderTwin(null);
 
   function setHucLevel(lvl) {
     currentHucLevel = lvl;
@@ -587,6 +617,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     pushState();
     if (!map.loaded()) return;
     if (v === 'gridded') {
+      renderTwin(null);
       map.setLayoutProperty('swe',      'visibility', 'visible');
       map.setLayoutProperty('huc-fill', 'visibility', 'none');
       map.setLayoutProperty('huc-line', 'visibility', 'none');
