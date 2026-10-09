@@ -2,8 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <!-- Endpoints this page actually uses, and nothing else. The sha256 covers the
-       inline anti-flash script below — the only inline script here.
+  <!-- Endpoints this page actually uses, and nothing else. script-src carries
+       two hashes, one per inline script: the anti-flash boot and the MapLibre
+       import map (the kit's published hash; the map is one line, copied byte
+       for byte from snippets/head.html, so it holds on every page).
+       worker-src needs BOTH blob: and unpkg: MapLibre 6 starts its worker from
+       a blob: URL that then imports the worker chunk from unpkg, and with
+       blob: alone the basemap draws while no GeoJSON layer ever does.
+       img-src allows jsDelivr for the kit-hosted favicons (kit 0.9.0).
        connect-src carries every host MapLibre and the app FETCH from: the
        CloudFront origin serving COG rasters, FlatGeobuf boundaries and Parquet
        zonal stats, the CARTO basemap, the hillshade DEM on s3.amazonaws.com,
@@ -12,11 +18,11 @@
        enumerate these carefully. -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'none';
-    script-src 'self' 'sha256-o+rXj9Jy2CUuPoewBVeBz2GYT71qiUGzjc3SklYSaSw=' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh;
-    worker-src blob:;
+    script-src 'self' 'sha256-OLe5UNKipCWDsiB3oW7e+OsD0zw6rjzozTKfQk0LVVk=' 'sha256-NgHBdw+Nl6S2kTHNyvv5uFwHfytmfDJR39Y9qVPt/UI=' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh;
+    worker-src blob: https://unpkg.com;
     style-src 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
     font-src https://cdn.jsdelivr.net;
-    img-src 'self' data: blob:;
+    img-src 'self' data: blob: https://cdn.jsdelivr.net;
     connect-src 'self' https://d1s8jav5n0eyyf.cloudfront.net https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://s3.amazonaws.com https://esm.sh;
     base-uri 'none';
     form-action 'none'">
@@ -31,61 +37,90 @@
   <meta name="theme-color" content="#161b22" media="(prefers-color-scheme: dark)">
   <link rel="canonical" href="https://snow.climate.umt.edu/">
 
-  <!-- Favicons / app icons — this page previously had none at all. -->
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
+  <!-- Favicons / app icons, hot-linked from the pinned kit tag (kit 0.9.0,
+       decided 2026-10-08) so they version with the kit and can't drift. The
+       navbar logo stays vendored in assets/. -->
+  <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/assets/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/assets/icon-512.png">
 
-  <!-- Open Graph -->
+  <!-- Open Graph / Twitter. The card image is the kit's og-card.png from the
+       pinned tag (the vendored copy was never referenced). -->
   <meta property="og:type"        content="website">
   <meta property="og:site_name"   content="Montana Climate Office">
   <meta property="og:title"       content="Snowpack · Montana Climate Office">
   <meta property="og:description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
-  <meta property="og:url"         content="https://snow.climate.umt.edu">
+  <meta property="og:url"         content="https://snow.climate.umt.edu/">
+  <meta property="og:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/assets/og-card.png">
+  <meta property="og:image:width"  content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt"   content="Montana Climate Office">
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:title"       content="Snowpack · Montana Climate Office">
+  <meta name="twitter:description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
+  <meta name="twitter:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/assets/og-card.png">
+  <meta name="twitter:image:alt"   content="Montana Climate Office">
 
-  <!-- mco-web-style · anti-flash theme boot. Kept INLINE and ahead of every
-       stylesheet on purpose: from a CDN it would land after first paint and
-       reintroduce the flash it exists to prevent.
-       Precedence: ?theme= → localStorage['mco-theme'] → OS preference. The
-       previous version read the shared key but trusted it blindly and had no
-       ?theme= support; the whitelist is also what admits high-contrast, which
-       this page had no way to reach.
-       The sha256 in the CSP above covers these exact bytes — recompute after
-       any edit here, whitespace included. -->
-  <script>
-    (function () {
-      const raw = new URLSearchParams(location.search).get('theme');
-      const url = raw == null ? null : raw.toLowerCase();
-      let saved = null;
-      try { saved = localStorage.getItem('mco-theme'); } catch (e) {}
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const valid = ['dark', 'light', 'high-contrast'];
-      const t = valid.includes(url) ? url
-              : valid.includes(saved) ? saved
-              : (prefersDark ? 'dark' : 'light');
-      const root = document.documentElement;
-      root.setAttribute('data-theme', t);
-      root.classList.toggle('is-compact', window.matchMedia('(max-width: 640px), (max-height: 560px)').matches);
-      root.classList.toggle('is-touch', window.matchMedia('(hover: none)').matches);
-    })();
-  </script>
+  <!-- mco-web-style · anti-flash theme boot (snippets/anti-flash.html @0.9.0,
+       copied byte for byte). Kept INLINE and ahead of every stylesheet on
+       purpose: from a CDN it would land after first paint and reintroduce the
+       flash it exists to prevent. Precedence: ?theme= → localStorage['mco-theme']
+       → OS preference. Since 0.9.0 it also adds html.mco-booting, which
+       MCO.ready() (app.js) removes; a 3 s timeout releases it regardless.
+       The first sha256 in the CSP above covers these exact bytes — recompute
+       after any edit here, whitespace included (MIGRATING § Gotchas). -->
+<script>
+  (function () {
+    const raw = new URLSearchParams(location.search).get('theme');
+    const url = raw == null ? null : raw.toLowerCase();
+    let saved = null;
+    try { saved = localStorage.getItem('mco-theme'); } catch (e) {}
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const valid = ['dark', 'light', 'high-contrast'];
+    const t = valid.includes(url) ? url
+            : valid.includes(saved) ? saved
+            : (prefersDark ? 'dark' : 'light');
+    const root = document.documentElement;
+    root.setAttribute('data-theme', t);
+    root.classList.toggle('is-compact', window.matchMedia('(max-width: 640px), (max-height: 560px)').matches);
+    root.classList.toggle('is-touch', window.matchMedia('(hover: none)').matches);
+    // First-paint hold (0.9.0): [data-hold] stays invisible until MCO.ready();
+    // this timeout releases it anyway, so a failed script never strands a page.
+    root.classList.add('mco-booting');
+    setTimeout(function () { root.classList.remove('mco-booting'); }, 3000);
+  })();
+</script>
 
-  <!-- House fonts: kit-hosted (mco-web-style 0.7.0), declared in mco-theme.css.
-       Preloaded so the first frame is already in Outfit — no system-font flash.
-       Same @version as the theme CSS; crossorigin is required on font preloads. -->
-  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/fonts/space-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css"
-        integrity="sha384-q7EDwLXBfakVimqzBJqFCTxpgy7B18buhebV158qkVMCEVAaUnU3fQTEfWgYz+7g"
-        crossorigin="anonymous">
+  <!-- House fonts: kit-hosted, declared in mco-theme.css. Preloaded so the
+       first frame is already in Outfit — no system-font flash. Same @version
+       as the theme CSS; crossorigin is required on font preloads. -->
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/fonts/space-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
 
-  <!-- mco-web-style @0.6.0 — tokens, reset, a11y utilities, navbar/panel/toast/
+  <!-- MapLibre GL 6.11.2 (kit 0.8.0+; 5.18.0 carried the critical
+       attribution-control XSS GHSA-jrc7-96c5-q579). 6.x is ES-modules only:
+       mco-map.js imports it (MCO.map.loadMapLibre) and this import map carries
+       the SRI for the entry and shared chunk. ONE line, byte for byte from
+       snippets/head.html — its CSP hash depends on it. It must precede every
+       module load on the page (app.js and its esm.sh import included). -->
+<script type="importmap">{"integrity":{"https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.mjs":"sha384-KQzExYlfg1SnYNpLaXHTnaCTjr5wmiZ6X3sasvPb94caZfH+3+T1Sl4eJziXUtmN","https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl-shared.mjs":"sha384-V59ofCEPEqpSk5Mswc19DtDYbZWJtne210dFzS328Il6O31eLwTV7v57+Z3NjW/7"}}</script>
+<link rel="modulepreload" href="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.mjs"
+      integrity="sha384-KQzExYlfg1SnYNpLaXHTnaCTjr5wmiZ6X3sasvPb94caZfH+3+T1Sl4eJziXUtmN"
+      crossorigin="anonymous">
+<link rel="modulepreload" href="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl-shared.mjs"
+      integrity="sha384-V59ofCEPEqpSk5Mswc19DtDYbZWJtne210dFzS328Il6O31eLwTV7v57+Z3NjW/7"
+      crossorigin="anonymous">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.css"
+      integrity="sha384-ntw3zEt6rcVML7jDK0ULmHa5hxLB23afsPqzqfY+gLgMfAkbFCnCgPpkZvV5mmZX"
+      crossorigin="anonymous">
+
+  <!-- mco-web-style @0.9.0 — tokens, reset, a11y utilities, navbar/panel/toast/
        tooltip/modal shells, MapLibre control polish, and the high-contrast
        theme this page had no values for. -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/theme/mco-theme.css"
-        integrity="sha384-dktZyfU+lLz1JEFe+npkBVrH8FsSdtYYOPC7bJQtZwEJnvD3IiENV+UUgyXeFpnl"
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/theme/mco-theme.css"
+        integrity="sha384-qVWCeYiqMV4ZHkUNHf/Aq1VhShNzyLWBcnsYYrmUzbquyQDmm6gIIUoFHYBJG9xo"
         crossorigin="anonymous">
 
   <style>
@@ -216,6 +251,14 @@
        these are this app's own controls. */
     @media (hover: none) {
       #legend-info-btn { min-width: 40px; min-height: 40px; }
+      /* Found by the kit 0.9.0 harness's 390px touch-target gate. The ID rule
+         above (24px) outbids the kit's .mco-panel-toggle 40px; #btn-info is a
+         plain .nav-btn (32px wide); and the date input stayed ~21px tall.
+         `height`, not min-height: WebKit ignores min-height on native form
+         controls (MIGRATING § Gotchas). */
+      #legend-toggle-btn { width: 40px; height: 40px; }
+      #btn-info { min-width: 40px; }
+      #date-input { height: 40px; }
       .legend-row { min-height: 32px; }
       /* WCAG 2.5.5 — two stacked 15px buttons are untappable. Lay the stepper
          out as a pair of 40px targets side by side instead, exactly as
@@ -466,30 +509,30 @@
   </div>
 </dialog>
 
-<!-- Vendor libraries, all now version-pinned and SRI-guarded. flatgeobuf was
-     on a FLOATING major (@3): an integrity hash against a floating version
-     hard-fails the moment the CDN serves 3.39, so it is pinned to the 3.38.0
-     that @3 currently resolves to — the same pin mesonet-explorer carries. -->
-<script src="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js"
-        integrity="sha384-MYTfGytf3SxNyO7ZAu/U0wHCcs3NpqE92Q3wBz5PQhat8kEA/wbwb9qY6H/JLyuR"
-        crossorigin="anonymous"></script>
+<!-- Vendor libraries, all version-pinned and SRI-guarded. MapLibre is not
+     among them any more: 6.x has no UMD build, so mco-map.js imports it on
+     demand (MCO.map.loadMapLibre, awaited at the top of app.js) under the
+     import map's hashes in <head>. flatgeobuf was once on a FLOATING major
+     (@3): an integrity hash against a floating version hard-fails the moment
+     the CDN moves, so it is pinned to 3.38.0, as mesonet-explorer is. -->
 <script src="https://cdn.jsdelivr.net/npm/fzstd@0.1.1/umd/index.js"
         integrity="sha384-j11FJIL1HatEZOwEloCeZcNzDESMGs1ncTc2Kt0LgG0QpBU7lZHgyGU0Mif1OHeH"
         crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatgeobuf@3.38.0/dist/flatgeobuf-geojson.min.js"
         integrity="sha384-qaUb9sZ45HYxNQezOWPyOMTRR7yph9xtoAW8TyJGHen5BcUmaBIcDil9Yj48HGav"
         crossorigin="anonymous"></script>
-<!-- mco-web-style @0.6.0 — classic scripts, so they run before the deferred
+<!-- mco-web-style @0.9.0 — classic scripts, so they run before the deferred
      module below and MCO / MCO.map are already globals by the time it does.
-     cog-protocol.js is the KIT's copy now; the local file was byte-identical.
-     SRI hashes are the kit README's table for this exact tag. -->
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/core/mco-core.js"
-        integrity="sha384-ZOGCREEJsO8sY1wJ7eS/Q7K7NdZAHF+LxSMoO3ZGqBtEVISX3616cGomCW418hXH"
+     cog-protocol.js is the KIT's copy. SRI hashes are the kit README's table
+     for this exact tag. No mco-palette.js: this app's data ramp is the USDM
+     category scale, app-owned, and it draws no station markers. -->
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/core/mco-core.js"
+        integrity="sha384-yknmet0AW3oohpwhoHolSpFs3O+rLzc5OxHp60If3eqmF/ENZRfrILPIsCWm08Hf"
         crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/map/mco-map.js"
-        integrity="sha384-0aF67+MSXmcocGs8r3qiehgDNzgXo9F48olS5OX575wO2llw2cuGcqLpd6+L7D76"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/map/mco-map.js"
+        integrity="sha384-tmDqtqi4yYiDHOxkZikwzXF3Lpkb63b0Tu6K7jeCpU9gJkPB2GbpFHLasGHka6zP"
         crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.7.1/map/cog-protocol.js"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.9.0/map/cog-protocol.js"
         integrity="sha384-9hkbnrwnT71VgTqMFjTM8g3GFmvQH1z24Z9gvSAeCxF4YeuTS3lL3PMQTjWelFZm"
         crossorigin="anonymous"></script>
 

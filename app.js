@@ -6,6 +6,11 @@
    plain globals via classic <script> tags, which run before this deferred
    module, so both are available here without importing anything.
 
+   MapLibre is different since kit 0.8.0: 6.x is ES-modules only, so there is
+   no maplibregl global until MCO.map.loadMapLibre() has imported it (under
+   the import map's SRI hashes in index.html). The IIFE awaits it first, so
+   every maplibregl.* below — and CogProtocol.initCogProtocol — sees it.
+
    Extracted from an inline <script type="module"> during the mco-web-style
    migration (kit @0.6.0) — an external file is what lets the page ship a meta
    CSP without 'unsafe-inline'.
@@ -56,6 +61,18 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   // Step thresholds + colors for HUC fill expressions (mirrors the COG colormap)
   const HUC_COLOR_STOPS = BREAKS.slice(1).flatMap((b, i) => [b, `rgb(${COLORS[i + 1]})`]);
+
+  // ── MapLibre 6 ───────────────────────────────────────────────────────────
+  // Awaited before anything else, as the UMD <script> it replaces was: the UI
+  // wiring below closes over `map`, so it must not run ahead of the library.
+  try {
+    await MCO.map.loadMapLibre();
+  } catch (err) {
+    console.error('[maplibre]', err);
+    MCO.notice({ tone: 'danger', text: 'The map library failed to load. Reload the page to try again.' });
+    MCO.ready();
+    return;
+  }
 
   // ── Colormap ─────────────────────────────────────────────────────────────
   CogProtocol.registerColormap('ptile', CogProtocol.makeStepColormap({
@@ -249,7 +266,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     ...(_hasInitPos
       ? { center: [_initLng, _initLat], zoom: _initZoom }
       : { bounds: COG_BOUNDS, fitBoundsOptions: FIT_OPTS }),
-    canvasContextAttributes: { preserveDrawingBuffer: true }, // required for PNG export (MapLibre 5.x API)
+    canvasContextAttributes: { preserveDrawingBuffer: true }, // required for PNG export (MapLibre ≥ 5 option; unchanged in 6)
   });
 
   map.addControl(new maplibregl.NavigationControl(), 'top-right');
@@ -348,6 +365,11 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     map.on('moveend', pushState);
 
     _mapReady = true;
+
+    // First meaningful state: the first data layer has drawn. Releases the
+    // kit's html.mco-booting first-paint hold (kit 0.9.0); the anti-flash
+    // snippet's 3 s timeout releases it anyway if this never resolves.
+    _initReady.then(() => MCO.ready(), () => MCO.ready());
 
     // URL-triggered export: fire only after the data layer is ready
     if (urlParams.get('export') === 'true') {
