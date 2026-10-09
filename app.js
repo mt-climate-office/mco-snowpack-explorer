@@ -166,12 +166,16 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   // MCO.showToast owns the transient toast (and creates its own element).
   const showToast = MCO.showToast;
 
-  // A polite live region for values the user deliberately asked for. Separate
-  // from the toast because a toast is chrome that happens TO you, while a
-  // pinned reading is an answer to a question — and this is the only route a
-  // screen-reader user has to a gridded raster value at all.
-  const srAnnounceEl = document.getElementById('sr-announce');
-  const announce = (text) => { if (srAnnounceEl) srAnnounceEl.textContent = text; };
+  // A pinned reading is an answer to a question — and the only route a
+  // screen-reader user has to a gridded raster value at all — so it goes
+  // through the page's one announcer, MCO.announce (kit 0.8.0). The toast that
+  // shows the same text is kept out of the accessibility tree for it
+  // ({announce: false}), or a screen reader heard every reading twice: once
+  // from the toast's role=status and once from the old #sr-announce region.
+  const pinReading = (msg) => {
+    showToast(msg, undefined, { announce: false });
+    MCO.announce(msg);
+  };
 
   // ── Theme ─────────────────────────────────────────────────────────────────
   // MCO.initThemeToggle owns the icon swap, the aria-label, and persistence to
@@ -659,8 +663,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
       const msg = ptile != null
         ? `${label}: ${ordinal(Math.round(ptile))} percentile`
         : `${label}: no data`;
-      showToast(msg);
-      announce(msg);
+      pinReading(msg);
       return;
     }
 
@@ -671,8 +674,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     const msg = value == null
       ? `No snowpack data at ${where}`
       : `${ordinal(value)} percentile at ${where}`;
-    showToast(msg);
-    announce(msg);
+    pinReading(msg);
   });
 
   // ── Share ─────────────────────────────────────────────────────────────────

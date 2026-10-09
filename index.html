@@ -435,13 +435,9 @@
 <!-- Purely visual: anchored to the cursor, with no focusable trigger, so it is
      never surfaced to assistive tech. role="tooltip" (pre-existing) actually
      HURT — it promises an accessible name and a trigger relationship that do
-     not exist, and axe flags it. The AT path is #sr-announce below, which the
+     not exist, and axe flags it. The AT path is MCO.announce, which the
      click-to-pin readout writes to. Matches the other four consumers. -->
 <div id="tooltip" class="mco-tooltip" aria-hidden="true"></div>
-<!-- Screen-reader announcements for the pinned raster readout. Separate from
-     the toast on purpose: a value the user asked for should be announced, and
-     the kit's toast is transient chrome. -->
-<div id="sr-announce" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <dialog id="info-modal" class="mco-modal" aria-labelledby="info-modal-title">
   <div class="info-modal-box">
