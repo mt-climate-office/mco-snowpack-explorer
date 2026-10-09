@@ -172,14 +172,6 @@
       margin-right: 0.35rem; flex-shrink: 0;
     }
     .info-icon svg { stroke: currentColor; }
-    /* kit-override: WebKit never matches :focus-visible on <input type="date">
-       (keyboard focus lands in its month/day/year sub-fields; measured: :focus
-       true, :focus-visible false, outline none), so the kit's universal ring
-       never shows on it in Safari. A text-entry control shows the ring on any
-       focus under the :focus-visible heuristics anyway, so :focus is the same
-       ring by another route. Reported to the kit. */
-    #date-input:focus { outline: 2px solid var(--accent-line); outline-offset: 2px; }
-
     /* ── Map ───────────────────────────────────────────────────────────────── */
     #main { flex: 1; min-height: 0; position: relative; }
 
