@@ -704,13 +704,19 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     const FOOT_H  = px(80);
     const MAP_H   = px(700) - TITLE_H - FOOT_H;
     const PAD     = px(20);
-    const dark    = MCO.getTheme() !== 'light';
+    // Chrome colors and fonts from the live theme (MCO.chartTokens, kit 0.9.0)
+    // instead of hand-copied hexes. The copies knew two themes, so a
+    // high-contrast export came out in the dark palette. Bands are the
+    // surface tone; the rules are the brand --accent (a fill, so allowed).
+    const T = MCO.chartTokens();
     const C = {
-      bg:     dark ? '#1e2530' : '#f0f2f5',
-      text:   dark ? '#e8ecf0' : '#1a1a2e',
-      muted:  dark ? '#8a99b0' : '#5a6070',
-      accent: '#1a6faf',
+      bg:     T.surface,
+      text:   T.text,
+      muted:  T.textMuted,
+      accent: MCO.cssVar('--accent'),
     };
+    const UI   = T.fontUi;
+    const MONO = T.fontMono;
 
     // Resize the map container to the exact export dimensions so the captured
     // canvas matches without any stretching. Restore afterwards.
@@ -763,15 +769,15 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     const methodLabel = { zig: 'ZIG', ecdf: 'ECDF' }[currentMethod];
 
     ctx.fillStyle = C.text;
-    ctx.font = `600 ${px(14)}px Outfit, system-ui, sans-serif`;
+    ctx.font = `600 ${px(14)}px ${UI}`;
     ctx.fillText('Snowpack Explorer', textX, TITLE_H * 0.42);
 
     ctx.fillStyle = C.muted;
-    ctx.font = `400 ${px(10)}px Outfit, system-ui, sans-serif`;
+    ctx.font = `400 ${px(10)}px ${UI}`;
     ctx.fillText(`${currentDate} · ${methodLabel} · ${viewLabel}`, textX, TITLE_H * 0.78);
 
     ctx.textAlign = 'right';
-    ctx.font = `400 ${px(9)}px Outfit, system-ui, sans-serif`;
+    ctx.font = `400 ${px(9)}px ${UI}`;
     ctx.fillText(MCO.credit(), W - PAD, TITLE_H * 0.55);
     ctx.textAlign = 'left';
 
@@ -802,12 +808,12 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
     // Left: title + method + date + ref period
     ctx.fillStyle = C.text;
-    ctx.font = `600 ${px(9)}px Outfit, system-ui, sans-serif`;
+    ctx.font = `600 ${px(9)}px ${UI}`;
     ctx.fillText(`SWE PERCENTILE · ${methodLabel}`, PAD, midFY - px(14));
     if (prov) {
       const years = prov.reference_dates.map(d => d.slice(0, 4));
       ctx.fillStyle = C.muted;
-      ctx.font = `400 ${px(7.5)}px 'Space Mono', monospace, system-ui`;
+      ctx.font = `400 ${px(7.5)}px ${MONO}`;
       ctx.fillText(formatDate(prov.normals_date), PAD, midFY);
       ctx.fillText(`${years[0]}\u2013${years[years.length - 1]}`, PAD, midFY + px(14));
     }
@@ -815,7 +821,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     // Right: attribution
     ctx.textAlign = 'right';
     ctx.fillStyle = C.muted;
-    ctx.font = `400 ${px(8)}px Outfit, system-ui, sans-serif`;
+    ctx.font = `400 ${px(8)}px ${UI}`;
     ctx.fillText(MCO.credit({ source: 'NOAA SNODAS' }), W - PAD, midFY);
     ctx.textAlign = 'left';
 
@@ -826,7 +832,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     const swGap = px(5);  // swatch → label
     const iGap  = px(10); // label → next swatch
 
-    ctx.font = `400 ${px(8)}px Outfit, system-ui, sans-serif`;
+    ctx.font = `400 ${px(8)}px ${UI}`;
     const legItems = BREAKS.map((lo, i) => {
       const hi  = i + 1 < BREAKS.length ? BREAKS[i + 1] : null;
       const lbl = lo === 0 ? `< ${hi}` : hi === null ? `\u2265 ${lo}` : `${lo}\u2013${hi}`;
