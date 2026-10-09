@@ -284,7 +284,14 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     canvasContextAttributes: { preserveDrawingBuffer: true }, // required for PNG export (MapLibre ≥ 5 option; unchanged in 6)
   });
 
-  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  // House navigation (MCO.map.addNavigation): zoom buttons, top-right, no
+  // compass — rotation isn't a feature here, and a compass that never turns
+  // is one more tab stop and touch target of noise (settled precedent).
+  MCO.map.addNavigation(map);
+  // …so rotation goes too, or a rotated map would have no way back north.
+  map.dragRotate.disable();
+  map.touchZoomRotate.disableRotation();
+  map.keyboard.disableRotation();
 
   // A dead basemap no longer leaves a blank page (kit 0.8.0): the style is
   // retried, then replaced by the kit's blank style (which loads, so the data
