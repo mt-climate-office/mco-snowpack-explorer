@@ -150,8 +150,17 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
       params.zoom = map.getZoom().toFixed(2);
     } catch {}  // map not yet initialized on first call
     history.replaceState(null, '', `?${new URLSearchParams(params)}`);
-    document.title = `Snowpack Explorer · ${currentDate} · Montana Climate Office`;
+    setTitle();
   }
+
+  // HOUSE-STYLE §1 / CONSUMERS.md page titles: "<detail> · Snowpack · MCO",
+  // detail first (a tab truncates) and the SHORT family. This used to write
+  // "Snowpack Explorer · <date> · Montana Climate Office" — the wrong short
+  // name, the long family and the detail in the middle.
+  function setTitle() {
+    MCO.setPageTitle({ short: 'Snowpack', family: 'MCO', detail: currentDate });
+  }
+  setTitle();
 
   // ── Announcements ─────────────────────────────────────────────────────────
   // MCO.showToast owns the transient toast (and creates its own element).
