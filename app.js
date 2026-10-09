@@ -184,15 +184,9 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     button:   document.getElementById('btn-theme'),
     iconSun:  document.getElementById('icon-sun'),
     iconMoon: document.getElementById('icon-moon'),
-    onChange: () => {
-      map.setStyle(MCO.map.cartoStyleUrl());
-      map.once('style.load', () => {
-        addCustomLayers();
-        // The HUC source was recreated empty — force a full reload
-        _hucSourceLevel = null;
-        if (currentView === 'zonal') setHucLayer();
-      });
-    },
+    // The style.load listener below re-adds the data layers after any style
+    // swap, so a theme change only has to swap the style.
+    onChange: () => map.setStyle(MCO.map.cartoStyleUrl()),
   });
 
   // ── Legend ────────────────────────────────────────────────────────────────
@@ -284,6 +278,24 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+  // A dead basemap no longer leaves a blank page (kit 0.8.0): the style is
+  // retried, then replaced by the kit's blank style (which loads, so the data
+  // still draws) with a Retry notice.
+  MCO.map.watchBasemap(map);
+
+  // Re-add the data layers on EVERY style.load — a theme switch, a basemap
+  // retry or the blank fallback each replace the style and drop them. The
+  // first load is handled by the 'load' handler below, which validates the
+  // date before adding the COG source (a missing date would fill the console
+  // with tile errors), so this waits until that has happened once.
+  let _layersAdded = false;
+  map.on('style.load', () => {
+    if (!_layersAdded) return;
+    addCustomLayers();
+    _hucSourceLevel = null;   // the HUC source was recreated empty — force a full reload
+    if (currentView === 'zonal') setHucLayer();
+  });
+
   // Add custom sources and layers in the correct z-order.
   // Called on initial load and after each basemap style swap.
   function addCustomLayers() {
@@ -362,6 +374,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     }
 
     addCustomLayers();
+    _layersAdded = true;
 
     // Preload all FGB boundary files in the background so zonal view is instant
     preloadFgb();
