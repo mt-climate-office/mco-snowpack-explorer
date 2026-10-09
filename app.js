@@ -323,7 +323,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
         type: 'raster',
         tiles: [`cog://ptile/${cogUrl(currentDate)}/{z}/{x}/{y}`],
         tileSize: 256, minzoom: 2, maxzoom: 14,
-        attribution: 'NOAA SNODAS | Montana Climate Office',
+        attribution: MCO.credit({ source: 'NOAA SNODAS' }),   // the one credit string; middots, never a pipe
       });
     }
     if (!map.getLayer('swe')) {
@@ -770,7 +770,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
     ctx.textAlign = 'right';
     ctx.font = `400 ${px(9)}px Outfit, system-ui, sans-serif`;
-    ctx.fillText('Montana Climate Office · climate.umt.edu', W - PAD, TITLE_H * 0.55);
+    ctx.fillText(MCO.credit(), W - PAD, TITLE_H * 0.55);
     ctx.textAlign = 'left';
 
     // ── Map ──────────────────────────────────────────────────────────────────
@@ -814,7 +814,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     ctx.textAlign = 'right';
     ctx.fillStyle = C.muted;
     ctx.font = `400 ${px(8)}px Outfit, system-ui, sans-serif`;
-    ctx.fillText('NOAA SNODAS · Montana Climate Office', W - PAD, midFY);
+    ctx.fillText(MCO.credit({ source: 'NOAA SNODAS' }), W - PAD, midFY);
     ctx.textAlign = 'left';
 
     // Center: horizontal swatch legend — same style as sidebar, wide format
