@@ -173,7 +173,7 @@
     }
     .info-icon svg { stroke: currentColor; }
     /* ── Map ───────────────────────────────────────────────────────────────── */
-    #map-container { flex: 1; min-height: 0; position: relative; }
+    #main { flex: 1; min-height: 0; position: relative; }
 
     #map { width: 100%; height: 100%; }
 
@@ -288,7 +288,7 @@
 <body>
 
 <!-- WCAG 2.4.1 — first focusable element, jumps past the navbar to the map. -->
-<a class="mco-skip-link" href="#map-container">Skip to map</a>
+<a class="mco-skip-link" href="#main">Skip to map</a>
 
 <header id="navbar" class="mco-navbar">
   <a href="https://climate.umt.edu" target="_blank" rel="noopener noreferrer"
@@ -393,7 +393,7 @@
   </div>
 </header>
 
-<main id="map-container" tabindex="-1">
+<main id="main" tabindex="-1">
   <div id="map" role="application" aria-label="SWE Percentile Map"></div>
 
   <aside id="legend" class="mco-panel" aria-labelledby="legend-title">
