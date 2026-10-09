@@ -740,7 +740,33 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   });
 
   // ── Export ────────────────────────────────────────────────────────────────
-  let _logoImg = null; // MCO logo cached after first export
+  // HOUSE-STYLE §1 Logo (kit 0.11.0): exports draw the WORDMARK from the
+  // pinned kit tag, CORS-loaded (jsDelivr sends ACAO: *) so the canvas stays
+  // exportable; img-src already allows cdn.jsdelivr.net. The fixed-color twin
+  // is picked by the EXPORT's background, not the page theme.
+  const KIT_ASSETS = 'https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.1/assets';
+  const WORDMARK_ASPECT = 432 / 159;   // the SVGs' viewBox
+  const _wordmarks = new Map();        // 'on-dark' | 'on-light' → Promise<Image|null>
+  function loadWordmark(variant) {
+    if (!_wordmarks.has(variant)) {
+      _wordmarks.set(variant, new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = () => resolve(img);
+        img.onerror = () => { _wordmarks.delete(variant); resolve(null); };
+        img.src = `${KIT_ASSETS}/mco-wordmark-${variant}.svg`;
+      }));
+    }
+    return _wordmarks.get(variant);
+  }
+  // Relative luminance (WCAG) of a computed color: '#rrggbb' or 'rgb(r, g, b)'.
+  function luminance(color) {
+    const m = /^#([0-9a-f]{6})$/i.exec(color.trim());
+    const rgb = m ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16))
+                  : (color.match(/\d+(\.\d+)?/g) || [0, 0, 0]).slice(0, 3).map(Number);
+    const [r, g, b] = rgb.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
 
   async function exportMap() {
     showToast('Preparing export…');
@@ -790,18 +816,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
     const mapCanvas = map.getCanvas();
 
-    // The vendored navbar logo (same origin, so it never taints the canvas).
-    // This used to hot-link climate.umt.edu, which the page's CSP img-src has
-    // never allowed — every export since the 0.6.0 migration silently drew
-    // no logo, with only a CSP console line to show for it.
-    if (!_logoImg) {
-      _logoImg = await new Promise(resolve => {
-        const img = new Image();
-        img.onload  = () => resolve(img);
-        img.onerror = () => resolve(null);
-        img.src = 'assets/mco-logo.png';
-      });
-    }
+    const logoImg = await loadWordmark(luminance(C.bg) < 0.4 ? 'on-dark' : 'on-light');
 
     const canvas = document.createElement('canvas');
     canvas.width  = W;
@@ -815,9 +830,13 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     ctx.fillStyle = C.accent;
     ctx.fillRect(0, TITLE_H - px(2), W, px(2));
 
-    const logoSz = px(34);
-    if (_logoImg) ctx.drawImage(_logoImg, PAD, (TITLE_H - logoSz) / 2, logoSz, logoSz);
-    const textX = PAD + (_logoImg ? logoSz + px(10) : 0);
+    // Wordmark 34 CSS px = 68 export px tall (minimum 40), centered in the
+    // 112px band: 22px above and below and a 40px left pad, all over the
+    // 15%-of-height clear space (≈10px); 24px before the title text.
+    const logoH = px(34);
+    const logoW = Math.round(logoH * WORDMARK_ASPECT);
+    if (logoImg) ctx.drawImage(logoImg, PAD, (TITLE_H - logoH) / 2, logoW, logoH);
+    const textX = PAD + (logoImg ? logoW + px(12) : 0);
 
     const viewLabel   = currentView === 'gridded' ? 'Gridded' : `Zonal · HUC${currentHucLevel}`;
     const methodLabel = { zig: 'ZIG', ecdf: 'ECDF' }[currentMethod];
