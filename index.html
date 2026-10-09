@@ -273,9 +273,24 @@
     /* ── Responsive ────────────────────────────────────────────────────────── */
     /* Step 1 — hide text labels */
     @media (max-width: 1400px) { .control-label { display: none; } .btn-label { display: none; } }
-    /* Step 2 — hide brand + divider, tighten gaps */
+    /* Step 2 — collapse the brand to the badge, tighten gaps.
+       kit-override: the kit collapses the lockup at 750px; this bar sheds it
+       at 1060px, because in the zonal view (four HUC buttons) the one-row bar
+       needs ~1000px with the lockup and the info button clips off the right
+       edge from 1000px down to 751px (measured, Chromium and WebKit). The
+       METHOD is now the kit's — visually hidden, so the title stays in the
+       accessibility tree — not the display:none this rule used to apply. */
     @media (max-width: 1060px) {
-      .brand, .nav-divider { display: none; }
+      /* kit-override: the kit's 750px brand collapse, applied at 1060px. */
+      :where(.mco-navbar) .brand {
+        position: absolute;
+        width: 1px; height: 1px;
+        padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0, 0, 0, 0);
+        white-space: nowrap; border: 0;
+      }
+      /* kit-override: the divider goes with the lockup, as at the kit's 750px. */
+      .mco-navbar > .nav-divider { display: none; }
       #navbar { padding-left: 0.6rem; padding-right: 0.6rem; gap: 0.4rem; }
       .nav-actions { gap: 0.2rem; }
     }
