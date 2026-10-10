@@ -751,7 +751,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   // pinned kit tag, CORS-loaded (jsDelivr sends ACAO: *) so the canvas stays
   // exportable; img-src already allows cdn.jsdelivr.net. The fixed-color twin
   // is picked by the EXPORT's background, not the page theme.
-  const KIT_ASSETS = 'https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/assets';
+  const KIT_ASSETS = 'https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/assets';
   const WORDMARK_ASPECT = 432 / 159;   // the SVGs' viewBox
   const _wordmarks = new Map();        // 'on-dark' | 'on-light' → Promise<Image|null>
   function loadWordmark(variant) {

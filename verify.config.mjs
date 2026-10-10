@@ -40,13 +40,7 @@ export default {
     { name: 'zonal-winter', query: '?date=2026-02-15&view=zonal&huc=4', ready: painted },
   ],
   exemptTargets: '',
-  // Pre-existing, proven at baseline (pristine @0.7.1 checkout, 2026-10-09)
-  // and in the 0.7.0 migration notes: the KIT's cog-protocol.js emptyTile()
-  // calls OffscreenCanvas.convertToBlob() on a canvas that never had a
-  // context, which the spec makes an InvalidStateError. Chromium only, at
-  // 390px (where tiles fall outside the COG bounds). Reported to the kit;
-  // it is not this app's code to fix. Never add a CSP line here.
-  allowProblems: ['"OffscreenCanvas" has no rendering context'],
+  allowProblems: [],
   dialogOpener: '#btn-info',
   shortcuts: [],
   probes: async ({ open, check }) => {
