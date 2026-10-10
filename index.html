@@ -40,11 +40,11 @@
   <!-- Favicons / app icons, hot-linked from the pinned kit tag (kit 0.9.0,
        decided 2026-10-08) so they version with the kit and can't drift. The
        navbar logo stays vendored in assets/. -->
-  <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/assets/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/assets/favicon-16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/assets/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/assets/icon-192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/assets/icon-512.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/assets/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/assets/icon-512.png">
 
   <!-- Open Graph / Twitter. The card image is the kit's og-card.png from the
        pinned tag (the vendored copy was never referenced). -->
@@ -53,17 +53,17 @@
   <meta property="og:title"       content="Snowpack · Montana Climate Office">
   <meta property="og:description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
   <meta property="og:url"         content="https://snow.climate.umt.edu/">
-  <meta property="og:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/assets/og-card.png">
+  <meta property="og:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/assets/og-card.png">
   <meta property="og:image:width"  content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt"   content="Montana Climate Office">
   <meta name="twitter:card"        content="summary_large_image">
   <meta name="twitter:title"       content="Snowpack · Montana Climate Office">
   <meta name="twitter:description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
-  <meta name="twitter:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/assets/og-card.png">
+  <meta name="twitter:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/assets/og-card.png">
   <meta name="twitter:image:alt"   content="Montana Climate Office">
 
-  <!-- mco-web-style · anti-flash theme boot (snippets/anti-flash.html @0.11.2, unchanged since 0.9.0;
+  <!-- mco-web-style · anti-flash theme boot (snippets/anti-flash.html @0.11.3, unchanged since 0.9.0;
        copied byte for byte). Kept INLINE and ahead of every stylesheet on
        purpose: from a CDN it would land after first paint and reintroduce the
        flash it exists to prevent. Precedence: ?theme= → localStorage['mco-theme']
@@ -96,8 +96,8 @@
   <!-- House fonts: kit-hosted, declared in mco-theme.css. Preloaded so the
        first frame is already in Outfit — no system-font flash. Same @version
        as the theme CSS; crossorigin is required on font preloads. -->
-  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/fonts/space-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/fonts/space-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
 
   <!-- MapLibre GL 6.11.2 (kit 0.8.0+; 5.18.0 carried the critical
        attribution-control XSS GHSA-jrc7-96c5-q579). 6.x is ES-modules only:
@@ -116,11 +116,11 @@
       integrity="sha384-ntw3zEt6rcVML7jDK0ULmHa5hxLB23afsPqzqfY+gLgMfAkbFCnCgPpkZvV5mmZX"
       crossorigin="anonymous">
 
-  <!-- mco-web-style @0.11.2 — tokens, reset, a11y utilities, navbar/panel/toast/
+  <!-- mco-web-style @0.11.3 — tokens, reset, a11y utilities, navbar/panel/toast/
        tooltip/modal shells, MapLibre control polish, and the high-contrast
        theme this page had no values for. -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/theme/mco-theme.css"
-        integrity="sha384-22H/4uZb4dmkrTZlLp4NJ4J+Wg39RNRIVIKO0x1HPYfyUWj81FA0fyM/uoRqbqme"
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/theme/mco-theme.css"
+        integrity="sha384-SVU0zinE4kdg7DL79mgXmebk2GD/Gy4cnCeu/hn3eZSxgg3X+g4Fr4qC0Ou1bE20"
         crossorigin="anonymous">
 
   <style>
@@ -173,7 +173,7 @@
     }
     .info-icon svg { stroke: currentColor; }
     /* ── Map ───────────────────────────────────────────────────────────────── */
-    #map-container { flex: 1; min-height: 0; position: relative; }
+    #main { flex: 1; min-height: 0; position: relative; }
 
     #map { width: 100%; height: 100%; }
 
@@ -273,14 +273,35 @@
     /* ── Responsive ────────────────────────────────────────────────────────── */
     /* Step 1 — hide text labels */
     @media (max-width: 1400px) { .control-label { display: none; } .btn-label { display: none; } }
-    /* Step 2 — hide brand + divider, tighten gaps */
+    /* Step 2 — collapse the brand to the badge, tighten gaps.
+       kit-override: the kit collapses the lockup at 750px; this bar sheds it
+       at 1060px, because in the zonal view (four HUC buttons) the one-row bar
+       needs ~1000px with the lockup and the info button clips off the right
+       edge from 1000px down to 751px (measured, Chromium and WebKit). The
+       METHOD is now the kit's — visually hidden, so the title stays in the
+       accessibility tree — not the display:none this rule used to apply. */
     @media (max-width: 1060px) {
-      .brand, .nav-divider { display: none; }
+      /* kit-override: the kit's 750px brand collapse, applied at 1060px. */
+      :where(.mco-navbar) .brand {
+        position: absolute;
+        width: 1px; height: 1px;
+        padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0, 0, 0, 0);
+        white-space: nowrap; border: 0;
+      }
+      /* kit-override: the divider goes with the lockup, as at the kit's 750px. */
+      .mco-navbar > .nav-divider { display: none; }
       #navbar { padding-left: 0.6rem; padding-right: 0.6rem; gap: 0.4rem; }
       .nav-actions { gap: 0.2rem; }
     }
     /* Step 3 — allow wrapping below portrait-phone width */
     @media (max-width: 640px)  { .nav-btn.date-step { height: 22px; } }
+    /* Rail drawer (kit 0.10.0; MCO.viewport.RAIL_MQ): the drawer has room, so
+       the control labels this bar sheds from 1400px down come back there. */
+    @media (max-height: 560px) and (orientation: landscape) {
+      /* kit-override: undoes this app's own ≤1400px display:none label shed. */
+      .mco-navbar[data-rail] .mco-nav-drawer .control-label { display: inline; }
+    }
     /* Above 641px keep controls on one line */
     @media (min-width: 641px)  { #navbar { flex-wrap: nowrap; } .controls { flex-wrap: nowrap; } }
   </style>
@@ -288,18 +309,31 @@
 <body>
 
 <!-- WCAG 2.4.1 — first focusable element, jumps past the navbar to the map. -->
-<a class="mco-skip-link" href="#map-container">Skip to map</a>
+<a class="mco-skip-link" href="#main">Skip to map</a>
 
-<header id="navbar" class="mco-navbar">
+<!-- data-rail (kit 0.10.0): on a landscape phone the one-row bar can't hold
+     the zonal controls (the theme and info buttons sat off-screen at 750×342),
+     so it becomes a 56px left rail and .mco-nav-drawer holds the rest
+     (MCO.initNavRail). Outside rail mode the drawer is display:contents and
+     the bar lays out exactly as before. -->
+<header id="navbar" class="mco-navbar" data-rail>
   <a href="https://climate.umt.edu" target="_blank" rel="noopener noreferrer"
      class="logo-link" aria-label="Montana Climate Office">
     <img src="assets/mco-logo.png" alt="" class="logo-img" width="40" height="40">
   </a>
 
+  <div class="mco-rail">
+    <button type="button" class="nav-btn icon-only" id="btn-rail-menu" aria-label="Menu"
+            aria-controls="nav-drawer" aria-expanded="false">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+  </div>
+
   <div class="nav-divider" aria-hidden="true"></div>
 
+  <div class="mco-nav-drawer" id="nav-drawer">
   <div class="brand">
-    <span class="brand-title">Snowpack Explorer</span>
+    <h1 class="brand-title">Snowpack Explorer</h1>
     <span class="brand-subtitle">A service of the Montana Climate Office</span>
   </div>
 
@@ -309,13 +343,13 @@
       <div class="date-stepper">
         <input type="date" id="date-input" aria-label="Date">
         <div class="date-step-btns">
-          <button class="nav-btn date-step" id="btn-date-next" aria-label="Next day">
+          <button type="button" class="nav-btn mco-step date-step" id="btn-date-next" aria-label="Next day">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="18 15 12 9 6 15"/>
             </svg>
           </button>
-          <button class="nav-btn date-step" id="btn-date-prev" aria-label="Previous day">
+          <button type="button" class="nav-btn mco-step date-step" id="btn-date-prev" aria-label="Previous day">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="6 9 12 15 18 9"/>
@@ -387,13 +421,17 @@
         <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
         <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
       </svg>
+      <svg id="icon-contrast" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
+           aria-hidden="true" style="display:none"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
     </button>
 
     <button class="nav-btn" id="btn-info" aria-label="About this map">?</button>
   </div>
+  </div>
 </header>
+<div class="mco-scrim" id="rail-scrim" aria-hidden="true" hidden></div>
 
-<main id="map-container" tabindex="-1">
+<main id="main" tabindex="-1">
   <div id="map" role="application" aria-label="SWE Percentile Map"></div>
 
   <aside id="legend" class="mco-panel" aria-labelledby="legend-title">
@@ -420,13 +458,9 @@
 <!-- Purely visual: anchored to the cursor, with no focusable trigger, so it is
      never surfaced to assistive tech. role="tooltip" (pre-existing) actually
      HURT — it promises an accessible name and a trigger relationship that do
-     not exist, and axe flags it. The AT path is #sr-announce below, which the
+     not exist, and axe flags it. The AT path is MCO.announce, which the
      click-to-pin readout writes to. Matches the other four consumers. -->
 <div id="tooltip" class="mco-tooltip" aria-hidden="true"></div>
-<!-- Screen-reader announcements for the pinned raster readout. Separate from
-     the toast on purpose: a value the user asked for should be announced, and
-     the kit's toast is transient chrome. -->
-<div id="sr-announce" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <dialog id="info-modal" class="mco-modal" aria-labelledby="info-modal-title">
   <div class="info-modal-box">
@@ -483,7 +517,7 @@
         <li><strong>Scroll</strong> or <strong>pinch</strong> to zoom the map; drag to pan.</li>
         <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><strong>Share</strong> — Copy a link to the current view to your clipboard.</li>
         <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><strong>Export</strong> — Download a PNG of the current map.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><strong>Theme</strong> — Toggle dark and light mode.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><strong>Theme</strong> — Step through dark, light and high-contrast themes.</li>
       </ul>
     </div>
 
@@ -521,19 +555,19 @@
 <script src="https://cdn.jsdelivr.net/npm/flatgeobuf@3.38.0/dist/flatgeobuf-geojson.min.js"
         integrity="sha384-qaUb9sZ45HYxNQezOWPyOMTRR7yph9xtoAW8TyJGHen5BcUmaBIcDil9Yj48HGav"
         crossorigin="anonymous"></script>
-<!-- mco-web-style @0.11.2 — classic scripts, so they run before the deferred
+<!-- mco-web-style @0.11.3 — classic scripts, so they run before the deferred
      module below and MCO / MCO.map are already globals by the time it does.
      cog-protocol.js is the KIT's copy. SRI hashes are the kit README's table
      for this exact tag. No mco-palette.js: this app's data ramp is the USDM
      category scale, app-owned, and it draws no station markers. -->
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/core/mco-core.js"
-        integrity="sha384-b4r3+tK/yiZ4TNEllSsbDX3qW0NhcHDsF2iPzUWunUc2vNf1qlq9t9qo2YWgoZiK"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/core/mco-core.js"
+        integrity="sha384-hwEGm+GrEB8L4Msos8t4L3tzlXRPiHR11CFgFn1jYSvD4izhSHQJIodHgm4ZuRf8"
         crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/map/mco-map.js"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/map/mco-map.js"
         integrity="sha384-tmDqtqi4yYiDHOxkZikwzXF3Lpkb63b0Tu6K7jeCpU9gJkPB2GbpFHLasGHka6zP"
         crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.2/map/cog-protocol.js"
-        integrity="sha384-9hkbnrwnT71VgTqMFjTM8g3GFmvQH1z24Z9gvSAeCxF4YeuTS3lL3PMQTjWelFZm"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/map/cog-protocol.js"
+        integrity="sha384-8KfmwSk9894unD1VJPQLo2DlTUp7+wLpl0ViJpo2LYG1J61nyqQ4twyvubpHLaeY"
         crossorigin="anonymous"></script>
 
 <script type="module" src="app.js"></script>

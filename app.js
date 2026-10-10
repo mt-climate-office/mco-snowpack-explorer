@@ -150,19 +150,32 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
       params.zoom = map.getZoom().toFixed(2);
     } catch {}  // map not yet initialized on first call
     history.replaceState(null, '', `?${new URLSearchParams(params)}`);
-    document.title = `Snowpack Explorer · ${currentDate} · Montana Climate Office`;
+    setTitle();
   }
+
+  // HOUSE-STYLE §1 / CONSUMERS.md page titles: "<detail> · Snowpack · MCO",
+  // detail first (a tab truncates) and the SHORT family. This used to write
+  // "Snowpack Explorer · <date> · Montana Climate Office" — the wrong short
+  // name, the long family and the detail in the middle.
+  function setTitle() {
+    MCO.setPageTitle({ short: 'Snowpack', family: 'MCO', detail: currentDate });
+  }
+  setTitle();
 
   // ── Announcements ─────────────────────────────────────────────────────────
   // MCO.showToast owns the transient toast (and creates its own element).
   const showToast = MCO.showToast;
 
-  // A polite live region for values the user deliberately asked for. Separate
-  // from the toast because a toast is chrome that happens TO you, while a
-  // pinned reading is an answer to a question — and this is the only route a
-  // screen-reader user has to a gridded raster value at all.
-  const srAnnounceEl = document.getElementById('sr-announce');
-  const announce = (text) => { if (srAnnounceEl) srAnnounceEl.textContent = text; };
+  // A pinned reading is an answer to a question — and the only route a
+  // screen-reader user has to a gridded raster value at all — so it goes
+  // through the page's one announcer, MCO.announce (kit 0.8.0). The toast that
+  // shows the same text is kept out of the accessibility tree for it
+  // ({announce: false}), or a screen reader heard every reading twice: once
+  // from the toast's role=status and once from the old #sr-announce region.
+  const pinReading = (msg) => {
+    showToast(msg, undefined, { announce: false });
+    MCO.announce(msg);
+  };
 
   // ── Theme ─────────────────────────────────────────────────────────────────
   // MCO.initThemeToggle owns the icon swap, the aria-label, and persistence to
@@ -171,16 +184,18 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     button:   document.getElementById('btn-theme'),
     iconSun:  document.getElementById('icon-sun'),
     iconMoon: document.getElementById('icon-moon'),
-    onChange: () => {
-      map.setStyle(MCO.map.cartoStyleUrl());
-      map.once('style.load', () => {
-        addCustomLayers();
-        // The HUC source was recreated empty — force a full reload
-        _hucSourceLevel = null;
-        if (currentView === 'zonal') setHucLayer();
-      });
-    },
+    // 3-state (kit 0.10.0): dark → light → high contrast, so high contrast is
+    // reachable from the page, not only via ?theme= or storage. The icon and
+    // aria-label name the theme a press switches TO.
+    cycle: true,
+    iconContrast: document.getElementById('icon-contrast'),
   });
+  // Any theme flip — this button or anything else calling MCO.setTheme —
+  // restyles the basemap (kit 0.9.0 event; was the toggle's onChange, which
+  // only saw this one button). The style.load listener below re-adds the
+  // data layers, so the listener only swaps the style. MapLibre has been
+  // awaited above, and the map exists before any user can flip the theme.
+  document.addEventListener('mco:themechange', () => map.setStyle(MCO.map.cartoStyleUrl()));
 
   // ── Legend ────────────────────────────────────────────────────────────────
   const legendRowsEl = document.getElementById('legend-rows');
@@ -269,7 +284,32 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     canvasContextAttributes: { preserveDrawingBuffer: true }, // required for PNG export (MapLibre ≥ 5 option; unchanged in 6)
   });
 
-  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  // House navigation (MCO.map.addNavigation): zoom buttons, top-right, no
+  // compass — rotation isn't a feature here, and a compass that never turns
+  // is one more tab stop and touch target of noise (settled precedent).
+  MCO.map.addNavigation(map);
+  // …so rotation goes too, or a rotated map would have no way back north.
+  map.dragRotate.disable();
+  map.touchZoomRotate.disableRotation();
+  map.keyboard.disableRotation();
+
+  // A dead basemap no longer leaves a blank page (kit 0.8.0): the style is
+  // retried, then replaced by the kit's blank style (which loads, so the data
+  // still draws) with a Retry notice.
+  MCO.map.watchBasemap(map);
+
+  // Re-add the data layers on EVERY style.load — a theme switch, a basemap
+  // retry or the blank fallback each replace the style and drop them. The
+  // first load is handled by the 'load' handler below, which validates the
+  // date before adding the COG source (a missing date would fill the console
+  // with tile errors), so this waits until that has happened once.
+  let _layersAdded = false;
+  map.on('style.load', () => {
+    if (!_layersAdded) return;
+    addCustomLayers();
+    _hucSourceLevel = null;   // the HUC source was recreated empty — force a full reload
+    if (currentView === 'zonal') setHucLayer();
+  });
 
   // Add custom sources and layers in the correct z-order.
   // Called on initial load and after each basemap style swap.
@@ -314,7 +354,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
         type: 'raster',
         tiles: [`cog://ptile/${cogUrl(currentDate)}/{z}/{x}/{y}`],
         tileSize: 256, minzoom: 2, maxzoom: 14,
-        attribution: 'NOAA SNODAS | Montana Climate Office',
+        attribution: MCO.credit({ source: 'NOAA SNODAS' }),   // the one credit string; middots, never a pipe
       });
     }
     if (!map.getLayer('swe')) {
@@ -345,9 +385,11 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
         showToast('No recent SNODAS data found');
       }
       pushState();
+      stepper.refresh();   // the fallback moved the date off its upper bound
     }
 
     addCustomLayers();
+    _layersAdded = true;
 
     // Preload all FGB boundary files in the background so zonal view is instant
     preloadFgb();
@@ -426,30 +468,25 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     CogProtocol.preload(cogUrl(currentDate));
     refreshLayers();
     fetchProvenance(currentDate, currentMethod).then(updateLegendMeta);
+    stepper.refresh();
   }
 
   dateInput.addEventListener('change', () => setDate(dateInput.value));
 
-  // Stepper with hold-to-repeat
-  function makeStepper(btnId, delta) {
-    const btn = document.getElementById(btnId);
-    let timeout, interval;
-    const step = () => {
-      const d = new Date(`${currentDate}T12:00:00`);
-      d.setDate(d.getDate() + delta);
-      setDate(d.toISOString().slice(0, 10));
-    };
-    const start = () => {
-      step();
-      timeout = setTimeout(() => { interval = setInterval(step, 120); }, 450);
-    };
-    const stop = () => { clearTimeout(timeout); clearInterval(interval); };
-    btn.addEventListener('mousedown', start);
-    btn.addEventListener('touchstart', (e) => { e.preventDefault(); start(); }, { passive: false });
-    ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(ev => btn.addEventListener(ev, stop));
-  }
-  makeStepper('btn-date-next', +1);
-  makeStepper('btn-date-prev', -1);
+  // Date stepper — the kit's (0.9.0). The hand-rolled one listened only for
+  // mousedown/touchstart, so Enter and Space on a focused stepper did nothing
+  // (WCAG 2.1.1). MCO.initStepper steps on click (keyboard included), repeats
+  // while a pointer is held, and disables a button at its bound. The new date
+  // is announced, since the change is otherwise visible only on the map.
+  const stepper = MCO.initStepper({
+    prev: document.getElementById('btn-date-prev'),
+    next: document.getElementById('btn-date-next'),
+    onStep: (d) => {
+      setDate(MCO.shiftDate(currentDate, d))
+        .then(() => MCO.announce(`Showing ${formatDate(currentDate)}`));
+    },
+    canStep: (d) => (d < 0 ? currentDate > SNODAS_START : currentDate < todayMT()),
+  });
 
   // ── Method toggle ─────────────────────────────────────────────────────────
   function setMethod(m) {
@@ -546,12 +583,13 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
       // ── Step 4: push swe_ptile as feature state (no geometry re-upload) ──
       const zonalData = _zonalCache.get(key);
+      const rows = [];
       for (const f of _fgbCache.get(currentHucLevel)) {
-        map.setFeatureState(
-          { source: 'huc', id: f.id },
-          { swe_ptile: zonalData.get(String(f.properties.huc)) ?? null }
-        );
+        const ptile = zonalData.get(String(f.properties.huc)) ?? null;
+        map.setFeatureState({ source: 'huc', id: f.id }, { swe_ptile: ptile });
+        rows.push({ id: String(f.properties.huc), name: f.properties.name, huc: f.properties.huc, ptile });
       }
+      renderTwin(rows);
 
       map.setLayoutProperty('huc-fill', 'visibility', 'visible');
       map.setLayoutProperty('huc-line', 'visibility', 'visible');
@@ -561,6 +599,35 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
       showToast('Failed to load basin data');
     }
   }
+
+  // ── Table twin (HOUSE-STYLE §5.2) ─────────────────────────────────────────
+  // The zonal view is canvas data: the twin gives a screen-reader user every
+  // drawn watershed and its percentile (the kit caps it at 500 rows; HUC8 has
+  // more, and the overflow row says so). The gridded raster has no tabular
+  // form — its AT path is the click-to-pin reading — so the twin is empty
+  // there and the map's label says which applies.
+  const mapEl = document.getElementById('map');
+  const twin = MCO.srTable({
+    caption: 'Watershed SWE percentiles',
+    columns: [
+      { key: 'name', label: 'Watershed', rowHeader: true },
+      { key: 'huc', label: 'HUC code' },
+      { key: 'ptile', label: 'SWE percentile', value: (r) => (r.ptile == null ? 'no data' : ordinal(Math.round(r.ptile))) },
+    ],
+    overflowText: (n) => `…and ${n} more watersheds. Choose a coarser HUC level to list them all.`,
+  });
+  function renderTwin(rows) {
+    if (rows) rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    twin.render(rows || []);
+    const methodLabel = { zig: 'ZIG', ecdf: 'ECDF' }[currentMethod];
+    twin.element.querySelector('caption').textContent = rows
+      ? `Watershed SWE percentiles, HUC${currentHucLevel}, ${currentDate}, ${methodLabel} (${rows.length})`
+      : 'Watershed SWE percentiles: shown in the zonal view only (0)';
+    mapEl.setAttribute('aria-label', rows
+      ? `SWE percentile map, zonal view, HUC${currentHucLevel}. The data is in the table that follows.`
+      : 'SWE percentile map, gridded view. Click or tap the map to hear the percentile at that point.');
+  }
+  if (currentView !== 'zonal') renderTwin(null);
 
   function setHucLevel(lvl) {
     currentHucLevel = lvl;
@@ -578,6 +645,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     pushState();
     if (!map.loaded()) return;
     if (v === 'gridded') {
+      renderTwin(null);
       map.setLayoutProperty('swe',      'visibility', 'visible');
       map.setLayoutProperty('huc-fill', 'visibility', 'none');
       map.setLayoutProperty('huc-line', 'visibility', 'none');
@@ -654,8 +722,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
       const msg = ptile != null
         ? `${label}: ${ordinal(Math.round(ptile))} percentile`
         : `${label}: no data`;
-      showToast(msg);
-      announce(msg);
+      pinReading(msg);
       return;
     }
 
@@ -666,8 +733,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     const msg = value == null
       ? `No snowpack data at ${where}`
       : `${ordinal(value)} percentile at ${where}`;
-    showToast(msg);
-    announce(msg);
+    pinReading(msg);
   });
 
   // ── Share ─────────────────────────────────────────────────────────────────
@@ -681,7 +747,33 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   });
 
   // ── Export ────────────────────────────────────────────────────────────────
-  let _logoImg = null; // MCO logo cached after first export
+  // HOUSE-STYLE §1 Logo (kit 0.11.0): exports draw the WORDMARK from the
+  // pinned kit tag, CORS-loaded (jsDelivr sends ACAO: *) so the canvas stays
+  // exportable; img-src already allows cdn.jsdelivr.net. The fixed-color twin
+  // is picked by the EXPORT's background, not the page theme.
+  const KIT_ASSETS = 'https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.11.3/assets';
+  const WORDMARK_ASPECT = 432 / 159;   // the SVGs' viewBox
+  const _wordmarks = new Map();        // 'on-dark' | 'on-light' → Promise<Image|null>
+  function loadWordmark(variant) {
+    if (!_wordmarks.has(variant)) {
+      _wordmarks.set(variant, new Promise(resolve => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = () => resolve(img);
+        img.onerror = () => { _wordmarks.delete(variant); resolve(null); };
+        img.src = `${KIT_ASSETS}/mco-wordmark-${variant}.svg`;
+      }));
+    }
+    return _wordmarks.get(variant);
+  }
+  // Relative luminance (WCAG) of a computed color: '#rrggbb' or 'rgb(r, g, b)'.
+  function luminance(color) {
+    const m = /^#([0-9a-f]{6})$/i.exec(color.trim());
+    const rgb = m ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16))
+                  : (color.match(/\d+(\.\d+)?/g) || [0, 0, 0]).slice(0, 3).map(Number);
+    const [r, g, b] = rgb.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
 
   async function exportMap() {
     showToast('Preparing export…');
@@ -699,13 +791,19 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     const FOOT_H  = px(80);
     const MAP_H   = px(700) - TITLE_H - FOOT_H;
     const PAD     = px(20);
-    const dark    = MCO.getTheme() !== 'light';
+    // Chrome colors and fonts from the live theme (MCO.chartTokens, kit 0.9.0)
+    // instead of hand-copied hexes. The copies knew two themes, so a
+    // high-contrast export came out in the dark palette. Bands are the
+    // surface tone; the rules are the brand --accent (a fill, so allowed).
+    const T = MCO.chartTokens();
     const C = {
-      bg:     dark ? '#1e2530' : '#f0f2f5',
-      text:   dark ? '#e8ecf0' : '#1a1a2e',
-      muted:  dark ? '#8a99b0' : '#5a6070',
-      accent: '#1a6faf',
+      bg:     T.surface,
+      text:   T.text,
+      muted:  T.textMuted,
+      accent: MCO.cssVar('--accent'),
     };
+    const UI   = T.fontUi;
+    const MONO = T.fontMono;
 
     // Resize the map container to the exact export dimensions so the captured
     // canvas matches without any stretching. Restore afterwards.
@@ -725,16 +823,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
     const mapCanvas = map.getCanvas();
 
-    // Load MCO logo with CORS. Falls back gracefully if CORS not allowed.
-    if (!_logoImg) {
-      _logoImg = await new Promise(resolve => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload  = () => resolve(img);
-        img.onerror = () => resolve(null);
-        img.src = 'https://climate.umt.edu/assets/images/MCO_logo_icon_only.png';
-      });
-    }
+    const logoImg = await loadWordmark(luminance(C.bg) < 0.4 ? 'on-dark' : 'on-light');
 
     const canvas = document.createElement('canvas');
     canvas.width  = W;
@@ -748,24 +837,28 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     ctx.fillStyle = C.accent;
     ctx.fillRect(0, TITLE_H - px(2), W, px(2));
 
-    const logoSz = px(34);
-    if (_logoImg) ctx.drawImage(_logoImg, PAD, (TITLE_H - logoSz) / 2, logoSz, logoSz);
-    const textX = PAD + (_logoImg ? logoSz + px(10) : 0);
+    // Wordmark 34 CSS px = 68 export px tall (minimum 40), centered in the
+    // 112px band: 22px above and below and a 40px left pad, all over the
+    // 15%-of-height clear space (≈10px); 24px before the title text.
+    const logoH = px(34);
+    const logoW = Math.round(logoH * WORDMARK_ASPECT);
+    if (logoImg) ctx.drawImage(logoImg, PAD, (TITLE_H - logoH) / 2, logoW, logoH);
+    const textX = PAD + (logoImg ? logoW + px(12) : 0);
 
     const viewLabel   = currentView === 'gridded' ? 'Gridded' : `Zonal · HUC${currentHucLevel}`;
     const methodLabel = { zig: 'ZIG', ecdf: 'ECDF' }[currentMethod];
 
     ctx.fillStyle = C.text;
-    ctx.font = `600 ${px(14)}px Outfit, system-ui, sans-serif`;
+    ctx.font = `600 ${px(14)}px ${UI}`;
     ctx.fillText('Snowpack Explorer', textX, TITLE_H * 0.42);
 
     ctx.fillStyle = C.muted;
-    ctx.font = `400 ${px(10)}px Outfit, system-ui, sans-serif`;
+    ctx.font = `400 ${px(10)}px ${UI}`;
     ctx.fillText(`${currentDate} · ${methodLabel} · ${viewLabel}`, textX, TITLE_H * 0.78);
 
     ctx.textAlign = 'right';
-    ctx.font = `400 ${px(9)}px Outfit, system-ui, sans-serif`;
-    ctx.fillText('Montana Climate Office · climate.umt.edu', W - PAD, TITLE_H * 0.55);
+    ctx.font = `400 ${px(9)}px ${UI}`;
+    ctx.fillText(MCO.credit(), W - PAD, TITLE_H * 0.55);
     ctx.textAlign = 'left';
 
     // ── Map ──────────────────────────────────────────────────────────────────
@@ -795,12 +888,12 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
     // Left: title + method + date + ref period
     ctx.fillStyle = C.text;
-    ctx.font = `600 ${px(9)}px Outfit, system-ui, sans-serif`;
+    ctx.font = `600 ${px(9)}px ${UI}`;
     ctx.fillText(`SWE PERCENTILE · ${methodLabel}`, PAD, midFY - px(14));
     if (prov) {
       const years = prov.reference_dates.map(d => d.slice(0, 4));
       ctx.fillStyle = C.muted;
-      ctx.font = `400 ${px(7.5)}px 'Space Mono', monospace, system-ui`;
+      ctx.font = `400 ${px(7.5)}px ${MONO}`;
       ctx.fillText(formatDate(prov.normals_date), PAD, midFY);
       ctx.fillText(`${years[0]}\u2013${years[years.length - 1]}`, PAD, midFY + px(14));
     }
@@ -808,8 +901,8 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     // Right: attribution
     ctx.textAlign = 'right';
     ctx.fillStyle = C.muted;
-    ctx.font = `400 ${px(8)}px Outfit, system-ui, sans-serif`;
-    ctx.fillText('NOAA SNODAS · Montana Climate Office', W - PAD, midFY);
+    ctx.font = `400 ${px(8)}px ${UI}`;
+    ctx.fillText(MCO.credit({ source: 'NOAA SNODAS' }), W - PAD, midFY);
     ctx.textAlign = 'left';
 
     // Center: horizontal swatch legend — same style as sidebar, wide format
@@ -819,7 +912,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     const swGap = px(5);  // swatch → label
     const iGap  = px(10); // label → next swatch
 
-    ctx.font = `400 ${px(8)}px Outfit, system-ui, sans-serif`;
+    ctx.font = `400 ${px(8)}px ${UI}`;
     const legItems = BREAKS.map((lo, i) => {
       const hi  = i + 1 < BREAKS.length ? BREAKS[i + 1] : null;
       const lbl = lo === 0 ? `< ${hi}` : hi === null ? `\u2265 ${lo}` : `${lo}\u2013${hi}`;
@@ -856,12 +949,29 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   document.getElementById('btn-export').addEventListener('click', exportMap);
 
+  // ── Nav rail (kit 0.10.0) ─────────────────────────────────────────────────
+  // Landscape phones: the bar becomes a left rail; its menu button opens the
+  // drawer with the controls (focus in, page inert, Esc / scrim back to it).
+  const rail = MCO.initNavRail({
+    toggle: document.getElementById('btn-rail-menu'),
+    drawer: document.getElementById('nav-drawer'),
+    scrim:  document.getElementById('rail-scrim'),
+  });
+
   // ── Info modal ────────────────────────────────────────────────────────────
   const infoModal = document.getElementById('info-modal');
 
   let _infoOpener = null;
   document.getElementById('btn-info').addEventListener('click', () => {
     _infoOpener = document.activeElement;
+    // In rail mode the info button lives in the nav drawer, which makes the
+    // rest of the page inert while open: close it first (focus does not go
+    // back to the toggle — the dialog takes it), and return focus to the
+    // rail's menu button, since the closed drawer's buttons are display:none.
+    if (rail.isOpen()) {
+      rail.close({ restoreFocus: false });
+      _infoOpener = document.getElementById('btn-rail-menu');
+    }
     infoModal.showModal();
   });
   document.getElementById('btn-info-close').addEventListener('click', () => infoModal.close());
