@@ -29,9 +29,13 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   // ── Constants ────────────────────────────────────────────────────────────
   const SNODAS_START = '2004-01-01';
-  const S3_ROOT    = 'https://d1s8jav5n0eyyf.cloudfront.net/snodas/normals/gridded';
-  const FGB_ROOT   = 'https://d1s8jav5n0eyyf.cloudfront.net/snodas/cache/data/fgb';
-  const ZONAL_ROOT = 'https://d1s8jav5n0eyyf.cloudfront.net/snodas/normals/zonal/wbd';
+  const DATA_HOST  = 'https://data2.climate.umt.edu';
+  // Backup: data2's CloudFront default domain serves the same paths. Swap it in
+  // if data2's certificate lapses again (the CSP already allows both).
+  // const DATA_HOST  = 'https://d1s8jav5n0eyyf.cloudfront.net';
+  const S3_ROOT    = `${DATA_HOST}/snodas/normals/gridded`;
+  const FGB_ROOT   = `${DATA_HOST}/snodas/cache/data/fgb`;
+  const ZONAL_ROOT = `${DATA_HOST}/snodas/normals/zonal/wbd`;
   const BREAKS  = [0, 2, 5, 10, 20, 30, 70, 80, 90, 95, 98];
   // U.S. Drought Monitor categories, paired 1:1 with BREAKS and COLORS. These
   // are NOT decoration: the ramp is hue-only by design, so D4 (exceptional
