@@ -21,7 +21,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 //   - Gridded view: renders a COG raster tile layer via the custom cog:// MapLibre protocol.
 //   - Zonal view: renders HUC watershed polygons colored by aggregated SWE percentile.
 //     Boundaries are loaded from FlatGeobuf (cached in Cache API across sessions).
-//     Percentiles are loaded from Parquet (cached in memory per date+method).
+//     Percentiles are loaded from Parquet (cached in memory per date).
 //     Feature state drives the fill color so geometry is only uploaded once per level.
 //   - Layer order (back → front): swe → huc-fill → hillshade → huc-line → labels
 
@@ -102,7 +102,15 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   // ── URL / state ───────────────────────────────────────────────────────────
   const urlParams = new URLSearchParams(location.search);
-  let currentMethod   = ['zig','ecdf'].includes(urlParams.get('method')) ? urlParams.get('method') : 'zig';
+  // ZIG is the only percentile method. The ECDF option was retired; an old
+  // ?method= link is ignored and the parameter is stripped from the URL.
+  const METHOD       = 'zig';
+  const METHOD_LABEL = 'ZIG';
+  if (urlParams.has('method')) {
+    const p = new URLSearchParams(location.search);
+    p.delete('method');
+    history.replaceState(null, '', `?${p}`);
+  }
   let currentDate     = urlParams.get('date') || todayMT();
   let currentView     = ['gridded','zonal'].includes(urlParams.get('view')) ? urlParams.get('view') : 'gridded';
   let currentHucLevel = (() => { const v = parseInt(urlParams.get('huc')); return [2,4,6,8].includes(v) ? v : 2; })();
@@ -116,7 +124,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   const _hasInitPos = !isNaN(_initLat) && !isNaN(_initLng) && !isNaN(_initZoom);
 
   // URL builders (defined after state so default args are readable)
-  const cogUrl        = (d, m = currentMethod) => `${S3_ROOT}/${m}/${d}/${d}_${m}_swe_ptile.tif`;
+  const cogUrl        = (d, m = METHOD) => `${S3_ROOT}/${m}/${d}/${d}_${m}_swe_ptile.tif`;
   const fgbUrl        = lvl   => `${FGB_ROOT}/huc${lvl}.fgb`;
   const zonalUrl      = (d, m) => `${ZONAL_ROOT}/${m}/${d}/${d}_${m}_swe_normals.parquet`;
   const provenanceUrl = (d, m) => `${S3_ROOT}/${m}/${d}/${d}_${m}_provenance.json`;
@@ -145,7 +153,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   }
 
   function pushState() {
-    const params = { date: currentDate, method: currentMethod, view: currentView };
+    const params = { date: currentDate, view: currentView };
     if (currentView === 'zonal') params.huc = currentHucLevel;
     try {
       const { lng, lat } = map.getCenter();
@@ -255,7 +263,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   function updateLegendMeta(prov) {
     document.getElementById('legend-sub').textContent =
-      { zig: 'ZIG', ecdf: 'ECDF' }[currentMethod] || '';
+      METHOD_LABEL;
     const el = document.getElementById('legend-meta');
     if (!prov) { el.textContent = ''; return; }
     const years    = prov.reference_dates.map(d => d.slice(0, 4));
@@ -263,7 +271,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     el.innerHTML   = `${formatDate(prov.normals_date)}<br>${refRange}`;
   }
 
-  fetchProvenance(currentDate, currentMethod).then(updateLegendMeta);
+  fetchProvenance(currentDate, METHOD).then(updateLegendMeta);
 
   // ── Map ───────────────────────────────────────────────────────────────────
   // No API keys here any more. The basemap moved from Stadia to the kit's
@@ -435,7 +443,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     map.getSource('swe')?.setTiles([`cog://ptile/${cogUrl(d)}/{z}/{x}/{y}`]);
   }
 
-  // Refresh whichever layers are active for the current date + method.
+  // Refresh whichever layers are active for the current date.
   function refreshLayers() {
     if (!map.loaded()) return;
     setSweLayer(currentDate);
@@ -471,7 +479,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     pushState();
     CogProtocol.preload(cogUrl(currentDate));
     refreshLayers();
-    fetchProvenance(currentDate, currentMethod).then(updateLegendMeta);
+    fetchProvenance(currentDate, METHOD).then(updateLegendMeta);
     stepper.refresh();
   }
 
@@ -490,22 +498,6 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
         .then(() => MCO.announce(`Showing ${formatDate(currentDate)}`));
     },
     canStep: (d) => (d < 0 ? currentDate > SNODAS_START : currentDate < todayMT()),
-  });
-
-  // ── Method toggle ─────────────────────────────────────────────────────────
-  function setMethod(m) {
-    currentMethod = m;
-    document.querySelectorAll('[data-method]').forEach(btn =>
-      btn.setAttribute('aria-pressed', btn.dataset.method === m ? 'true' : 'false'));
-    pushState();
-    CogProtocol.preload(cogUrl(currentDate, m));
-    refreshLayers();
-    fetchProvenance(currentDate, currentMethod).then(updateLegendMeta);
-  }
-
-  document.querySelectorAll('[data-method]').forEach(btn => {
-    btn.setAttribute('aria-pressed', btn.dataset.method === currentMethod ? 'true' : 'false');
-    btn.addEventListener('click', () => setMethod(btn.dataset.method));
   });
 
   // ── HUC zonal layers ──────────────────────────────────────────────────────
@@ -567,9 +559,9 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
       }
 
       // ── Step 3: load parquet lookup (small — cached in memory) ──
-      const key = `${currentDate}_${currentMethod}`;
+      const key = `${currentDate}_${METHOD}`;
       if (!_zonalCache.has(key)) {
-        const res = await fetch(zonalUrl(currentDate, currentMethod));
+        const res = await fetch(zonalUrl(currentDate, METHOD));
         if (!res.ok) throw new Error(`Parquet fetch failed: ${res.status}`);
         const ab = await res.arrayBuffer();
         const lookup = new Map();
@@ -623,9 +615,8 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   function renderTwin(rows) {
     if (rows) rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     twin.render(rows || []);
-    const methodLabel = { zig: 'ZIG', ecdf: 'ECDF' }[currentMethod];
     twin.element.querySelector('caption').textContent = rows
-      ? `Watershed SWE percentiles, HUC${currentHucLevel}, ${currentDate}, ${methodLabel} (${rows.length})`
+      ? `Watershed SWE percentiles, HUC${currentHucLevel}, ${currentDate}, ${METHOD_LABEL} (${rows.length})`
       : 'Watershed SWE percentiles: shown in the zonal view only (0)';
     mapEl.setAttribute('aria-label', rows
       ? `SWE percentile map, zonal view, HUC${currentHucLevel}. The data is in the table that follows.`
@@ -690,7 +681,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
         if (seq !== _hoverSeq) return;
         const { name, huc } = hits[0].properties;
         const label = name || `HUC${currentHucLevel} ${huc}`;
-        const zonalKey = `${currentDate}_${currentMethod}`;
+        const zonalKey = `${currentDate}_${METHOD}`;
         const ptile = _zonalCache.has(zonalKey)
           ? (_zonalCache.get(zonalKey).get(String(huc)) ?? null)
           : null;
@@ -719,7 +710,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
       if (!hits.length) return;
       const { name, huc } = hits[0].properties;
       const label    = name || `HUC${currentHucLevel} ${huc}`;
-      const zonalKey = `${currentDate}_${currentMethod}`;
+      const zonalKey = `${currentDate}_${METHOD}`;
       const ptile    = _zonalCache.has(zonalKey)
         ? (_zonalCache.get(zonalKey).get(String(huc)) ?? null)
         : null;
@@ -850,7 +841,6 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     const textX = PAD + (logoImg ? logoW + px(12) : 0);
 
     const viewLabel   = currentView === 'gridded' ? 'Gridded' : `Zonal · HUC${currentHucLevel}`;
-    const methodLabel = { zig: 'ZIG', ecdf: 'ECDF' }[currentMethod];
 
     ctx.fillStyle = C.text;
     ctx.font = `600 ${px(14)}px ${UI}`;
@@ -858,7 +848,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
     ctx.fillStyle = C.muted;
     ctx.font = `400 ${px(10)}px ${UI}`;
-    ctx.fillText(`${currentDate} · ${methodLabel} · ${viewLabel}`, textX, TITLE_H * 0.78);
+    ctx.fillText(`${currentDate} · ${METHOD_LABEL} · ${viewLabel}`, textX, TITLE_H * 0.78);
 
     ctx.textAlign = 'right';
     ctx.font = `400 ${px(9)}px ${UI}`;
@@ -886,14 +876,14 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
     ctx.fillStyle = C.accent;
     ctx.fillRect(0, footY, W, px(2));
 
-    const prov  = await fetchProvenance(currentDate, currentMethod);
+    const prov  = await fetchProvenance(currentDate, METHOD);
     const midFY = footY + FOOT_H / 2;
     ctx.textBaseline = 'middle';
 
     // Left: title + method + date + ref period
     ctx.fillStyle = C.text;
     ctx.font = `600 ${px(9)}px ${UI}`;
-    ctx.fillText(`SWE PERCENTILE · ${methodLabel}`, PAD, midFY - px(14));
+    ctx.fillText(`SWE PERCENTILE · ${METHOD_LABEL}`, PAD, midFY - px(14));
     if (prov) {
       const years = prov.reference_dates.map(d => d.slice(0, 4));
       ctx.fillStyle = C.muted;
@@ -996,12 +986,11 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
   const FLAVOR_DESC = {
     zig:  'Percentiles are estimated using a zero-inflated gamma distribution fit by L-moments, which smooths over sparse historical records and can extrapolate beyond observed extremes.',
-    ecdf: 'Percentiles are estimated by linearly interpolating the empirical CDF of positive reference-year values, making no distributional assumptions beyond the observed data.',
   };
 
   function showProvenance(prov) {
     if (!prov) return;
-    const methodLabel = { zig: 'ZIG', ecdf: 'ECDF' }[prov.flavor] || prov.flavor;
+    const methodLabel = { zig: 'ZIG' }[prov.flavor] || prov.flavor;
     document.getElementById('provenance-modal-subtitle').textContent =
       `${formatDate(prov.normals_date)} · ${methodLabel}`;
 
@@ -1050,7 +1039,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   let _provenanceOpener = null;
   document.getElementById('legend-info-btn').addEventListener('click', () => {
     _provenanceOpener = document.activeElement;
-    fetchProvenance(currentDate, currentMethod).then(showProvenance);
+    fetchProvenance(currentDate, METHOD).then(showProvenance);
   });
   document.getElementById('btn-provenance-close').addEventListener('click', () => provenanceModal.close());
   provenanceModal.addEventListener('click', (e) => { if (e.target === provenanceModal) provenanceModal.close(); });

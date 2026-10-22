@@ -360,14 +360,6 @@
     </div>
 
     <div class="control-group">
-      <span class="control-label">Method</span>
-      <div class="seg-btns" role="group" aria-label="Percentile method">
-        <button class="nav-btn seg-btn" data-method="zig"  aria-pressed="true">ZIG</button>
-        <button class="nav-btn seg-btn" data-method="ecdf" aria-pressed="false">ECDF</button>
-      </div>
-    </div>
-
-    <div class="control-group">
       <span class="control-label">View</span>
       <div class="seg-btns" role="group" aria-label="Map view">
         <button class="nav-btn seg-btn" data-view="gridded" aria-pressed="true">Gridded</button>
@@ -492,15 +484,11 @@
     </div>
 
     <div class="info-section">
-      <h3>Percentile methods</h3>
-      <ul>
-        <li><strong>ZIG</strong> — Zero-inflated gamma distribution fit by L-moments; smooths sparse
-            records and extrapolates beyond observed extremes.</li>
-        <li><strong>ECDF</strong> — Piecewise-linear empirical CDF; makes no distributional assumptions
-            beyond the observed data.</li>
-      </ul>
+      <h3>Percentile method</h3>
+      <p>Percentiles are estimated with a <strong>zero-inflated gamma (ZIG)</strong> distribution fit
+         by L-moments, which smooths sparse records and extrapolates beyond observed extremes.</p>
       <p>Click the <strong>ⓘ</strong> button in the legend for reference dates and full provenance
-         details for the current date and method.</p>
+         details for the current date.</p>
     </div>
 
     <div class="info-section">
