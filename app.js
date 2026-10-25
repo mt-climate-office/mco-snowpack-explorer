@@ -128,6 +128,9 @@
     return `${n}${s}`;
   }
 
+  // SWE depth as the plots and tables print it: mm, then inches.
+  const fmtSwe = (v) => (v == null || Number.isNaN(v) ? '—' : `${Math.round(v)} mm (${(v / 25.4).toFixed(1)} in)`);
+
   // Build an element with DOM calls only (HOUSE-STYLE §7): text children are
   // set as text, never parsed as HTML.
   function h(tag, props, ...children) {
@@ -895,50 +898,90 @@
   });
 
   // ── Hover tooltip ─────────────────────────────────────────────────────────
+  // What a basin plot's title and subtitle say, for whatever is under the
+  // pointer, against the current flavor:
+  //   Duncan River (HUC: 17010109)        ← zonal only
+  //   March 30, 2026
+  //   148% of Normal (~90th percentile)
+  //   SWE 81 mm (3.2 in)
   // App-owned rather than MCO.map.initCursorTooltip: the gridded reading is
-  // an async raster sample, not a rendered feature.
+  // an async raster sample, not a rendered feature. The lines are spans set
+  // with textContent, in the kit's tooltip classes.
   const tooltip = document.getElementById('tooltip');
   let _hoverSeq = 0;
 
-  function showTooltip(text, e) {
-    tooltip.textContent = text;
-    tooltip.classList.add('visible');
-    tooltip.style.left = `${e.originalEvent.clientX + 14}px`;
-    tooltip.style.top  = `${e.originalEvent.clientY + 14}px`;
+  // The daily SNODAS SWE grid (int16 mm, the percentile COGs' grid).
+  const sweCogUrl = (d) => `${DATA_HOST}/snodas/cogs/${d}/snodas_swe_${d.replace(/-/g, '')}.tif`;
+
+  // The plots' subtitle wording, from mco-snodas R/plot.R snodas_conditions():
+  // percent of the median for the date, then the percentile. Percent of
+  // normal is undefined when the median is zero (or not known).
+  function conditions(swe, median, ptile) {
+    const pct  = swe != null && median > 0 ? `${Math.round(100 * swe / median)}% of Normal` : null;
+    const rank = ptile != null ? `~${ordinal(Math.round(ptile))} percentile` : null;
+    if (!pct && !rank) return 'No normal for this date';
+    return !pct ? rank : !rank ? pct : `${pct} (${rank})`;
+  }
+  const sweLine = (swe) => (swe == null ? null : `SWE ${fmtSwe(swe)}`);
+
+  // The reading under a map point: {title?, lines[]}, or null for no data.
+  // Zonal: the watershed's row from the Parquet table (synchronous once
+  // loaded). Gridded: the percentile and SWE grids, sampled in parallel. The
+  // gridded median is in a 19-band quantiles COG the kit's reader can't
+  // decode, so percent of normal is left out there until a single-band
+  // median is published; conditions() then shows the percentile alone.
+  function zonalReading(f) {
+    const { name, huc } = f.properties;
+    const row = _zonalCache.get(`${currentDate}_${currentFlavor}`)?.get(String(huc)) ?? null;
+    return {
+      title: `${name || `HUC${String(huc).length}`} (HUC: ${huc})`,
+      lines: [MCO.formatDateStr(currentDate),
+        ...(row ? [conditions(row.swe, row.q50, row.ptile), sweLine(row.swe)] : [])].filter(Boolean),
+    };
+  }
+  async function griddedReading(lngLat) {
+    const [ptile, swe] = await Promise.all([
+      CogProtocol.queryValue(cogUrl(currentDate), lngLat.lng, lngLat.lat),
+      CogProtocol.queryValue(sweCogUrl(currentDate), lngLat.lng, lngLat.lat).catch(() => null),
+    ]);
+    if (ptile == null && swe == null) return null;
+    return { lines: [MCO.formatDateStr(currentDate), conditions(swe, null, ptile), sweLine(swe)].filter(Boolean) };
   }
 
-  function zonalPtile(huc) {
-    const zonal = _zonalCache.get(`${currentDate}_${currentFlavor}`);
-    return zonal?.get(String(huc))?.ptile ?? null;
+  function showTooltip(r, e) {
+    tooltip.replaceChildren(
+      ...(r.title ? [h('span', { className: 'tooltip-name', textContent: r.title })] : []),
+      ...r.lines.map((t, i) => h('span', { className: i === 0 ? 'tooltip-sub' : 'tooltip-val', textContent: t })));
+    tooltip.classList.add('visible');
+    // Cursor + 14px, flipped at the viewport's right and bottom edges.
+    const cx = e.originalEvent.clientX, cy = e.originalEvent.clientY;
+    let x = cx + 14, y = cy + 14;
+    if (x + tooltip.offsetWidth  > window.innerWidth  - 8) x = cx - tooltip.offsetWidth  - 14;
+    if (y + tooltip.offsetHeight > window.innerHeight - 8) y = cy - tooltip.offsetHeight - 14;
+    tooltip.style.left = `${Math.max(4, x)}px`;
+    tooltip.style.top  = `${Math.max(4, y)}px`;
   }
 
   map.on('mousemove', async (e) => {
     const seq = ++_hoverSeq;
-
-    // In zonal view, prefer the HUC feature name + percentile (synchronous)
     if (currentView === 'zonal') {
       const hits = map.queryRenderedFeatures(e.point, { layers: ['huc-fill'] });
-      if (hits.length > 0) {
-        const { name, huc } = hits[0].properties;
-        const label = name || `HUC${currentHucLevel} ${huc}`;
-        const ptile = zonalPtile(huc);
-        showTooltip(ptile != null ? `${label}: ${ordinal(Math.round(ptile))} percentile` : label, e);
-        return;
-      }
+      if (hits.length) showTooltip(zonalReading(hits[0]), e);
+      else tooltip.classList.remove('visible');
+      return;
     }
-
-    // Fall back to raster pixel query (async)
-    const value = await CogProtocol.queryValue(cogUrl(currentDate), e.lngLat.lng, e.lngLat.lat);
+    const r = await griddedReading(e.lngLat);
     if (seq !== _hoverSeq) return;
-    if (value == null) tooltip.classList.remove('visible');
-    else showTooltip(`${ordinal(value)} percentile`, e);
+    if (!r) tooltip.classList.remove('visible');
+    else showTooltip(r, e);
   });
 
-  map.on('mouseout', () => tooltip.classList.remove('visible'));
+  map.on('mouseout', () => { _hoverSeq++; tooltip.classList.remove('visible'); });
 
   // A click or tap on a watershed opens its basin dialog. On the gridded
-  // raster it pins a reading and announces it: the touch path and the
-  // assistive-tech path to a value, since a hover tooltip is never surfaced.
+  // raster it pins the same reading the tooltip shows and announces it: the
+  // touch path and the assistive-tech path to a value, since a hover
+  // tooltip is never surfaced.
   map.on('click', async (e) => {
     if (currentView === 'zonal') {
       const hits = map.queryRenderedFeatures(e.point, { layers: ['huc-fill'] });
@@ -948,12 +991,10 @@
     }
 
     // Gridded view: sample the pixel under the pointer.
-    const value = await CogProtocol.queryValue(cogUrl(currentDate), e.lngLat.lng, e.lngLat.lat);
+    const r = await griddedReading(e.lngLat);
     const where = `${Math.abs(e.lngLat.lat).toFixed(2)}°${e.lngLat.lat >= 0 ? 'N' : 'S'}, `
                 + `${Math.abs(e.lngLat.lng).toFixed(2)}°${e.lngLat.lng >= 0 ? 'E' : 'W'}`;
-    pinReading(value == null
-      ? `No snowpack data at ${where}`
-      : `${ordinal(value)} percentile at ${where}`);
+    pinReading(r ? `${where}: ${r.lines.slice(1).join(', ')}` : `No snowpack data at ${where}`);
   });
 
   // ── Basin dialog ──────────────────────────────────────────────────────────
@@ -1118,7 +1159,6 @@
     .replace('{flavor}', flavor).replace('{type}', type).replace('{style}', PLOT_STYLE).replace('{huc}', huc);
 
   // ── Numbers for the text alternative and the table ──
-  const fmtSwe = (v) => (v == null || Number.isNaN(v) ? '—' : `${Math.round(v)} mm (${(v / 25.4).toFixed(1)} in)`);
   const fmtPtile = (v) => (v == null || Number.isNaN(v) ? '—' : `${ordinal(Math.round(v))} percentile`);
 
   function plotAlt(row, date) {
