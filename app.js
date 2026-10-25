@@ -1,10 +1,11 @@
 /* ==========================================================================
    Snowpack Explorer — application code.
 
-   An ES module, not a classic script: it imports hyparquet from esm.sh at
-   runtime for the Parquet zonal statistics. The kit ships MCO / MCO.map as
-   plain globals via classic <script> tags, which run before this deferred
-   module, so both are available here without importing anything.
+   A classic script, like every kit consumer: MCO / MCO.map are globals from
+   the kit's classic <script> tags, which run before this one. The Parquet
+   reader (hyparquet + fzstd) is vendored in vendor/ (scripts/vendor.sh, the
+   mesonet-aq bundle byte for byte) and comes in by dynamic import(), which
+   classic scripts allow; 'self' covers it in the CSP.
 
    MapLibre is different since kit 0.8.0: 6.x is ES-modules only, so there is
    no maplibregl global until MCO.map.loadMapLibre() has imported it (under
@@ -15,7 +16,6 @@
    migration (kit @0.6.0) — an external file is what lets the page ship a meta
    CSP without 'unsafe-inline'.
    ========================================================================== */
-import { parquetRead } from 'https://esm.sh/hyparquet@1';
 
 // Architecture overview:
 //   - Gridded view: renders a COG raster tile layer via the custom cog:// MapLibre protocol.
@@ -26,6 +26,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
 //   - Layer order (back → front): swe → huc-fill → hillshade → huc-line → labels
 
 (async () => {
+  'use strict';
 
   // ── Constants ────────────────────────────────────────────────────────────
   const SNODAS_START = '2004-01-01';
@@ -505,6 +506,14 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   const _zonalCache = new Map(); // `${date}_${method}` → Map<zone, ptile>
   let _hucSourceLevel = null;    // which level is currently loaded into the 'huc' source
 
+  // The vendored Parquet reader, imported once on first use. A failed import
+  // is not cached, so a Retry imports it again.
+  let _parquetLib = null;
+  function parquetLib() {
+    return _parquetLib || (_parquetLib = import('./vendor/parquet.min.js')
+      .catch(err => { _parquetLib = null; throw err; }));
+  }
+
   // Fetch with Cache API persistence (falls back to plain fetch in non-secure contexts)
   async function fetchCached(url) {
     try {
@@ -564,16 +573,15 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
         const res = await fetch(zonalUrl(currentDate, METHOD));
         if (!res.ok) throw new Error(`Parquet fetch failed: ${res.status}`);
         const ab = await res.arrayBuffer();
+        const pq = await parquetLib();
         const lookup = new Map();
-        await parquetRead({
+        const rows = await pq.parquetReadObjects({
           file: ab,
           columns: ['zone', 'swe_ptile'],
-          compressors: { ZSTD: (input, _len) => fzstd.decompress(input) },
-          onComplete: rows => {
-            for (const [zone, ptile] of rows)
-              if (zone != null) lookup.set(String(zone), ptile ?? null);
-          },
+          compressors: { ZSTD: (input) => pq.zstdDecompress(input) },
         });
+        for (const { zone, swe_ptile } of rows)
+          if (zone != null) lookup.set(String(zone), swe_ptile ?? null);
         _zonalCache.set(key, lookup);
       }
 
@@ -746,7 +754,7 @@ import { parquetRead } from 'https://esm.sh/hyparquet@1';
   // pinned kit tag, CORS-loaded (jsDelivr sends ACAO: *) so the canvas stays
   // exportable; img-src already allows cdn.jsdelivr.net. The fixed-color twin
   // is picked by the EXPORT's background, not the page theme.
-  const KIT_ASSETS = 'https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.13.1/assets';
+  const KIT_ASSETS = 'https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.18.0/assets';
   const WORDMARK_ASPECT = 432 / 159;   // the SVGs' viewBox
   const _wordmarks = new Map();        // 'on-dark' | 'on-light' → Promise<Image|null>
   function loadWordmark(variant) {
