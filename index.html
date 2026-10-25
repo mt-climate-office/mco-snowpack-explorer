@@ -399,6 +399,26 @@
         </select>
       </div>
     </div>
+
+    <!-- Which normals every percentile is read against (mco-snodas's three
+         flavors). Smoothed is the default. -->
+    <div class="control-group seg-group">
+      <span class="control-label" aria-hidden="true">Normals</span>
+      <fieldset class="seg-btns is-radio" id="flavor-btns">
+        <legend class="sr-only">Normals</legend>
+        <label class="nav-btn seg-btn"><input type="radio" name="flavor" value="zig_smooth" checked>Smoothed</label>
+        <label class="nav-btn seg-btn"><input type="radio" name="flavor" value="zig">Fitted</label>
+        <label class="nav-btn seg-btn"><input type="radio" name="flavor" value="ecdf">Empirical</label>
+      </fieldset>
+    </div>
+    <div class="control-group select-group">
+      <label class="control-label" for="flavor-select">Normals</label>
+      <select class="nav-select" id="flavor-select" hidden>
+        <option value="zig_smooth">Smoothed</option>
+        <option value="zig">Fitted</option>
+        <option value="ecdf">Empirical</option>
+      </select>
+    </div>
   </div>
 
   <div class="nav-meta">

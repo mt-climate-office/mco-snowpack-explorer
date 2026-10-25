@@ -29,7 +29,11 @@
   'use strict';
 
   // ── Constants ────────────────────────────────────────────────────────────
-  const SNODAS_START = '2004-01-01';
+  // The first date with published percentiles: the normals pipeline
+  // (mco-snodas) starts at snow year 2026, so nothing before 2025-09-01 has
+  // a percentile file even though SNODAS itself begins in 2003. Move this
+  // back if older years are ever backfilled.
+  const SNODAS_START = '2025-09-01';
   const DATA_HOST  = 'https://data2.climate.umt.edu';
   // Backup: data2's CloudFront default domain serves the same paths. Swap it in
   // if data2's certificate lapses again (the CSP already allows both).
@@ -67,10 +71,16 @@
   // Step thresholds + colors for HUC fill expressions (mirrors the COG colormap)
   const HUC_COLOR_STOPS = BREAKS.slice(1).flatMap((b, i) => [b, `rgb(${COLORS[i + 1]})`]);
 
-  // The normals flavor every percentile is read against. One for now; the
-  // path segment is already a parameter of every URL builder below.
-  const FLAVOR       = 'zig';
-  const FLAVOR_LABEL = 'ZIG';
+  // The three normals flavors mco-snodas publishes, keyed by their path
+  // segment. `short` labels the control, `name` everything a person reads.
+  // Smoothed is the default: the steadiest through the season.
+  const FLAVORS = {
+    zig_smooth: { short: 'Smoothed',  name: 'Smoothed normals' },
+    zig:        { short: 'Fitted',    name: 'Fitted normals' },
+    ecdf:       { short: 'Empirical', name: 'Empirical normals' },
+  };
+  const DEFAULT_FLAVOR = 'zig_smooth';
+  const flavorName = (f = currentFlavor) => FLAVORS[f].name;
 
   const VIEWS      = ['gridded', 'zonal'];
   const HUC_LEVELS = [2, 4, 6, 8];
@@ -131,8 +141,7 @@
 
   // ── URL / state ───────────────────────────────────────────────────────────
   // URL is the primary state (HOUSE-STYLE §4): read once here, every value
-  // checked against what it may be. A stale ?method= from before the flavor
-  // was fixed is ignored, and the first URL write drops it.
+  // checked against what it may be.
   const urlParams = MCO.urlParams();
   const getLower  = (k) => MCO.getParamLower(k, urlParams);
 
@@ -143,6 +152,11 @@
   let currentDate     = askedDate || latestDate;
   let currentView     = VIEWS.includes(getLower('view')) ? getLower('view') : 'gridded';
   let currentHucLevel = (() => { const v = parseInt(urlParams.get('huc'), 10); return HUC_LEVELS.includes(v) ? v : 2; })();
+  // ?method=zig|ecdf is how the flavor was spelled before it had a control;
+  // an old link still lands on the flavor it named.
+  let currentFlavor = FLAVORS[getLower('flavor')] ? getLower('flavor')
+                    : ['zig', 'ecdf'].includes(getLower('method')) ? getLower('method')
+                    : DEFAULT_FLAVOR;
   if (currentDate < SNODAS_START) currentDate = SNODAS_START;
   if (currentDate > latestDate)   currentDate = latestDate;
 
@@ -157,10 +171,10 @@
   }
 
   // URL builders
-  const cogUrl        = (d, m = FLAVOR) => `${S3_ROOT}/${m}/${d}/${d}_${m}_swe_ptile.tif`;
+  const cogUrl        = (d, m = currentFlavor) => `${S3_ROOT}/${m}/${d}/${d}_${m}_swe_ptile.tif`;
   const fgbUrl        = lvl   => `${FGB_ROOT}/huc${lvl}.fgb`;
-  const zonalUrl      = (d, m = FLAVOR) => `${ZONAL_ROOT}/${m}/${d}/${d}_${m}_swe_normals.parquet`;
-  const provenanceUrl = (d, m = FLAVOR) => `${S3_ROOT}/${m}/${d}/${d}_${m}_provenance.json`;
+  const zonalUrl      = (d, m = currentFlavor) => `${ZONAL_ROOT}/${m}/${d}/${d}_${m}_swe_normals.parquet`;
+  const provenanceUrl = (d, m = currentFlavor) => `${S3_ROOT}/${m}/${d}/${d}_${m}_provenance.json`;
 
   async function cogExists(d) {
     try {
@@ -192,11 +206,13 @@
   // Mirror state into the query string (HOUSE-STYLE §4). The date is always
   // written: its default is "the latest available", so a link without it
   // would show a different day tomorrow. Everything else is elided at its
-  // default — the gridded view, the default extent (cameraParamsIfDefault),
-  // and the theme a visitor with no choice would get (MCO.osTheme()).
+  // default — the gridded view, Smoothed normals, the default extent
+  // (cameraParamsIfDefault), and the theme a visitor with no choice would get
+  // (MCO.osTheme()). A legacy ?method= is not carried forward.
   function writeUrl({ push = false, state } = {}) {
     const params = { date: currentDate };
     if (currentView === 'zonal') { params.view = 'zonal'; params.huc = currentHucLevel; }
+    if (currentFlavor !== DEFAULT_FLAVOR) params.flavor = currentFlavor;
     const theme = MCO.getTheme();
     if (theme !== MCO.osTheme()) params.theme = theme;
     if (_mapReady) Object.assign(params, MCO.map.cameraParamsIfDefault(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS }));
@@ -213,7 +229,7 @@
   function updateMeta() {
     const dateFmt = MCO.formatDateStr(currentDate);
     const where = currentView === 'zonal' ? `HUC${currentHucLevel} watersheds` : 'the contiguous United States';
-    const desc = `Snow water equivalent percentiles for ${where} on ${dateFmt}, from NOAA SNODAS. `
+    const desc = `Snow water equivalent percentiles for ${where} on ${dateFmt}, against ${flavorName().toLowerCase()}, from NOAA SNODAS. `
                + 'A service of the Montana Climate Office.';
     MCO.setPageTitle({ short: 'Snowpack', family: 'MCO', detail: dateFmt });
     MCO.setSocialMeta({ short: 'Snowpack', family: 'MCO', detail: dateFmt, description: desc, url: location.href });
@@ -294,7 +310,7 @@
   // Cached per date and flavor; a failed fetch is evicted, so a later open
   // tries again, and resolves to null for the callers.
   const _cache = MCO.promiseCache();
-  function fetchProvenance(d, m = FLAVOR) {
+  function fetchProvenance(d, m = currentFlavor) {
     return _cache.cached(`prov:${d}_${m}`, () => MCO.fetchJSON(provenanceUrl(d, m))).catch(() => null);
   }
 
@@ -304,7 +320,7 @@
   }
 
   function updateLegendMeta(prov) {
-    document.getElementById('legend-sub').textContent = FLAVOR_LABEL;
+    document.getElementById('legend-sub').textContent = flavorName();
     const el = document.getElementById('legend-meta');
     if (!prov) { el.textContent = ''; return; }
     el.replaceChildren(
@@ -627,7 +643,7 @@
       }
 
       // ── Step 2: load parquet lookup (small — cached in memory) ──
-      const key = `${date}_${FLAVOR}`;
+      const key = `${date}_${currentFlavor}`;
       if (!_zonalCache.has(key)) {
         const res = await fetch(zonalUrl(date));
         if (!res.ok) throw new Error(`Parquet fetch failed: ${res.status}`);
@@ -698,7 +714,7 @@
     if (rows) rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     twin.render(rows || []);
     mapEl.setAttribute('aria-label', rows
-      ? `SWE percentile map, zonal view, HUC${currentHucLevel} watersheds, ${MCO.formatDateStr(currentDate)}, ${FLAVOR_LABEL}. The data is in the table that follows.`
+      ? `SWE percentile map, zonal view, HUC${currentHucLevel} watersheds, ${MCO.formatDateStr(currentDate)}, ${flavorName().toLowerCase()}. The data is in the table that follows.`
       : 'SWE percentile map, gridded view. Click or tap the map to hear the percentile at that point.');
   }
   if (currentView !== 'zonal') renderTwin(null);
@@ -719,8 +735,15 @@
     mq: '(max-width: 1400px)',
     onChange: (v) => setHucLevel(parseInt(v, 10)),
   });
+  const flavorCtl = MCO.initSegmentedFallback({
+    group: document.getElementById('flavor-btns'),
+    select: document.getElementById('flavor-select'),
+    mq: '(max-width: 1400px)',
+    onChange: (f) => setFlavor(f),
+  });
   viewCtl.set(currentView);
   hucCtl.set(String(currentHucLevel));
+  flavorCtl.set(currentFlavor);
   hucGroup.hidden = currentView !== 'zonal';
 
   function setHucLevel(lvl, { silent = false } = {}) {
@@ -729,6 +752,19 @@
     hucCtl.set(String(lvl));
     if (!silent) { writeUrl(); MCO.announce(`HUC${lvl} watersheds`); }
     if (_layersAdded) setHucLayer();
+  }
+
+  // Every percentile on the page is read against one flavor of normals, so a
+  // switch redraws whichever view is showing and the legend's provenance.
+  // The URL builders take the flavor as their path segment.
+  function setFlavor(f, { silent = false } = {}) {
+    if (!FLAVORS[f] || f === currentFlavor) return;
+    currentFlavor = f;
+    flavorCtl.set(f);
+    if (!silent) { writeUrl(); MCO.announce(`Percentiles against ${flavorName().toLowerCase()}`); }
+    CogProtocol.preload(cogUrl(currentDate));
+    refreshLayers();
+    fetchProvenance(currentDate).then(updateLegendMeta);
   }
 
   function setView(v, { silent = false } = {}) {
@@ -764,6 +800,8 @@
     const v = (params.get('view') || 'gridded').toLowerCase();
     const lvl = parseInt(params.get('huc'), 10);
     if (HUC_LEVELS.includes(lvl)) setHucLevel(lvl, { silent: true });
+    const f = (params.get('flavor') || DEFAULT_FLAVOR).toLowerCase();
+    if (FLAVORS[f]) setFlavor(f, { silent: true });
     if (VIEWS.includes(v)) setView(v, { silent: true });
   });
 
@@ -781,7 +819,7 @@
   }
 
   function zonalPtile(huc) {
-    const zonal = _zonalCache.get(`${currentDate}_${FLAVOR}`);
+    const zonal = _zonalCache.get(`${currentDate}_${currentFlavor}`);
     return zonal ? (zonal.get(String(huc)) ?? null) : null;
   }
 
@@ -968,7 +1006,7 @@
 
     ctx.fillStyle = C.muted;
     ctx.font = `400 ${px(10)}px ${UI}`;
-    ctx.fillText(`${currentDate} · ${FLAVOR_LABEL} · ${viewLabel}`, textX, TITLE_H * 0.78);
+    ctx.fillText(`${currentDate} · ${flavorName()} · ${viewLabel}`, textX, TITLE_H * 0.78);
 
     ctx.textAlign = 'right';
     ctx.font = `400 ${px(9)}px ${UI}`;
@@ -1003,7 +1041,7 @@
     // Left: title + method + date + ref period
     ctx.fillStyle = C.text;
     ctx.font = `600 ${px(9)}px ${UI}`;
-    ctx.fillText(`SWE PERCENTILE · ${FLAVOR_LABEL}`, PAD, midFY - px(14));
+    ctx.fillText(`SWE PERCENTILE · ${flavorName().toUpperCase()}`, PAD, midFY - px(14));
     if (prov) {
       ctx.fillStyle = C.muted;
       ctx.font = `400 ${px(7.5)}px ${MONO}`;
@@ -1086,7 +1124,7 @@
   // not over another dialog, and never once the visitor has started using
   // the page — focus has left <body> (WCAG 3.2.1). The seen flag is written
   // at open time, so an unclosed dialog still counts.
-  const DEEP_LINK_PARAMS = ['date', 'view', 'huc', 'lng', 'export'];
+  const DEEP_LINK_PARAMS = ['date', 'view', 'huc', 'flavor', 'lng', 'export'];
   const hasDeepLink = DEEP_LINK_PARAMS.some(k => urlParams.has(k));
   const seenIntro = MCO.lsGet(LS_INFO_SEEN) === '1' || MCO.lsGet(LS_INFO_SEEN_OLD) === '1';
   if (!seenIntro && !hasDeepLink) {
@@ -1103,9 +1141,15 @@
   const provenanceModal = document.getElementById('provenance-modal');
   const provenanceCtl = MCO.initInfoModal({ dialog: provenanceModal });
 
+  // Method detail lives here, not in the info dialog (VOICE: plain words
+  // first, method last). From the normals README published beside the data.
   const FLAVOR_DESC = {
-    zig:  'Percentiles are estimated using a zero-inflated gamma distribution fit by L-moments, which smooths over sparse historical records and can extrapolate beyond observed extremes.',
+    zig_smooth: 'A zero-adjusted gamma distribution whose parameters change smoothly through the snow year (cyclic P-splines), fit to every day of the reference record at once. Neighbouring days share information, so the normal for one date does not jump around from the next.',
+    zig:        'A zero-inflated gamma distribution fit separately for each calendar day by L-moments, which smooths over sparse records and can extrapolate beyond observed extremes. Pixels with fewer than four snowy reference years fall back to the empirical distribution.',
+    ecdf:       'The empirical distribution of the reference years for that calendar day, with no fitted curve: this year is ranked directly against past years. With about 20 reference years it cannot extrapolate beyond the observed record.',
   };
+  const ZERO_NOTE = 'All three treat bare ground as its own case: zero SWE sits at the middle of the share of reference years that were also bare, so a place that is always bare on that date reads 50.';
+  const NORMALS_DOC = `${DATA_HOST}/snodas/normals/README.md`;   // mco-snodas s3-docs, published with the data
   const WBD_URL    = 'https://www.usgs.gov/national-hydrography/watershed-boundary-dataset';
   const SNODAS_URL = 'https://nsidc.org/data/g02158';
 
@@ -1114,7 +1158,7 @@
 
   function showProvenance(prov) {
     if (!prov) { showToast('Details for this date are not available yet.'); return; }
-    const methodLabel = { zig: 'ZIG' }[prov.flavor] || prov.flavor;
+    const methodLabel = FLAVORS[prov.flavor] ? flavorName(prov.flavor) : prov.flavor;
     document.getElementById('provenance-modal-subtitle').textContent =
       `${MCO.formatDateStr(prov.normals_date)} · ${methodLabel}`;
 
@@ -1132,7 +1176,8 @@
         ' (Snow Data Assimilation System) provides daily ~1 km gridded Snow Water Equivalent estimates for the contiguous United States, available from 2004 to present.')),
       section('Zonal data', h('p', {},
         'Watershed boundaries are from the ', link(WBD_URL, 'USGS Watershed Boundary Dataset'), ` (WBD)${hucText}`)),
-      section(`${methodLabel} method`, h('p', { textContent: FLAVOR_DESC[prov.flavor] || '' })),
+      section(methodLabel, h('p', { textContent: FLAVOR_DESC[prov.flavor] || '' }), h('p', { textContent: ZERO_NOTE }),
+        h('p', {}, 'The full method: ', link(NORMALS_DOC, 'SWE normals and percentiles'), '.')),
       section('Reference period', h('p', { textContent: `${prov.n_reference_years} SNODAS dates spanning ${refRange(prov)}.` })),
       section('Reference dates', h('ul', { className: 'provenance-dates' },
         ...prov.reference_dates.map(d => h('li', { textContent: MCO.formatDateStr(d) })))),
