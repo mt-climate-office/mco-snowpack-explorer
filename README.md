@@ -71,6 +71,9 @@ An old `?method=zig` or `?method=ecdf` link still opens on that flavor.
 - `app.js`: everything the page does. A classic script.
 - `vendor/parquet.min.js`: hyparquet and fzstd, bundled and pinned by
   `scripts/vendor.sh` (bump a version there and re-run it).
+- `data/snodas-domain.geojson`: the edge of the SNODAS grid, traced from its
+  NoData mask (NOHRSC publishes no boundary file), outlined in the gridded
+  view. `scripts/build-domain.sh` rebuilds it.
 - `verify.config.mjs`: scenarios and probes for the house verify harness.
 
 The look, the controls and most behaviour come from the Montana Climate

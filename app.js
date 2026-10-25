@@ -323,6 +323,15 @@
   // body after the slide, the choice remembered, and collapsed by default on
   // a compact screen (short landscape phones included) until the visitor
   // says otherwise.
+  // The domain outline's entry: a dashed swatch matching the map line.
+  const domainSwatch = h('span', { className: 'mco-legend-swatch' });
+  domainSwatch.dataset.shape = 'dash';
+  domainSwatch.setAttribute('aria-hidden', 'true');
+  domainSwatch.style.setProperty('--swatch', 'var(--text-secondary)');
+  const domainLegendRow = h('div', { className: 'legend-row legend-domain', hidden: currentView !== 'gridded' },
+    domainSwatch, h('span', { className: 'legend-lbl' }, h('span', { className: 'legend-cat', textContent: 'Edge of SNODAS data' })));
+  legendRowsEl.after(domainLegendRow);
+
   MCO.initCollapsible({
     toggle: document.getElementById('legend-toggle'),
     body:   document.getElementById('legend-body'),
@@ -476,6 +485,22 @@
       }, before);
     }
 
+    // The edge of the SNODAS grid (data/snodas-domain.geojson, traced from the
+    // grid's own NoData mask by scripts/build-domain.sh), outlined in the
+    // gridded view so a blank area outside it doesn't read as "no snow".
+    // Above the raster, below the basemap labels, dashed in --text-secondary:
+    // a text token, so it clears the 3:1 a boundary needs (WCAG 1.4.11) on
+    // the theme's surfaces, which the basemaps' land is close to (contrast
+    // not measured against the tiles themselves). Read at paint time and
+    // re-read on every style.load.
+    if (!map.getSource('domain')) map.addSource('domain', { type: 'geojson', data: 'data/snodas-domain.geojson' });
+    if (!map.getLayer('domain-line')) {
+      map.addLayer({
+        id: 'domain-line', type: 'line', source: 'domain',
+        paint: { 'line-color': MCO.cssVar('--text-secondary'), 'line-width': 1.5, 'line-dasharray': [3, 2] },
+      }, before);
+    }
+
     // SWE COG — sits below HUC fills
     if (!map.getSource('swe')) {
       map.addSource('swe', {
@@ -493,7 +518,7 @@
     }
 
     // Restore visibility for current view
-    map.setLayoutProperty('swe', 'visibility', currentView === 'gridded' ? 'visible' : 'none');
+    setGriddedVisible(currentView === 'gridded');
     const zonalVis = currentView === 'zonal' ? 'visible' : 'none';
     for (const id of HUC_LAYERS) map.setLayoutProperty(id, 'visibility', zonalVis);
   }
@@ -558,6 +583,15 @@
     // replaces rather than pushes.
     if (askedBasin && !exportOnLoad) openBasin(askedBasin, { push: false });
   });
+
+  // The gridded view's layers — the raster and the domain outline — and the
+  // outline's legend entry, which only means something beside the raster.
+  function setGriddedVisible(on) {
+    const vis = on ? 'visible' : 'none';
+    map.setLayoutProperty('swe', 'visibility', vis);
+    map.setLayoutProperty('domain-line', 'visibility', vis);
+    domainLegendRow.hidden = !on;
+  }
 
   // Update the COG raster tiles to a new date (no-op if source not yet added).
   function setSweLayer(d) {
@@ -743,7 +777,7 @@
       emptyEl.hidden = rows.some(r => r.ptile != null);
 
       for (const id of HUC_LAYERS) map.setLayoutProperty(id, 'visibility', 'visible');
-      map.setLayoutProperty('swe', 'visibility', 'none');
+      setGriddedVisible(false);
       loading.done();
     } catch (err) {
       console.error('[setHucLayer]', err);
@@ -856,7 +890,7 @@
       loading.done();
       emptyEl.hidden = true;
       renderTwin(null);
-      map.setLayoutProperty('swe', 'visibility', 'visible');
+      setGriddedVisible(true);
       for (const id of HUC_LAYERS) map.setLayoutProperty(id, 'visibility', 'none');
     } else {
       setHucLayer(); // hides swe only after a successful load

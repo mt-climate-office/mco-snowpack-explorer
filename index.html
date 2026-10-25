@@ -213,6 +213,7 @@
        light glass (HOUSE-STYLE §6). Category name first: it is the part that
        survives greyscale and CVD; the percentile range qualifies it. */
     .legend-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 3px; }
+    .legend-domain { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
     .legend-lbl { display: flex; flex-direction: column; line-height: 1.25; }
     .legend-cat { font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; }
     /* --text-secondary, not --text-muted: the panel is glass over an arbitrary
@@ -578,6 +579,8 @@
             98th percentile.</li>
       </ul>
       <p>A place with no snow on a date when it is always bare reads 50, near normal.</p>
+      <p>In the gridded view, a dashed line marks the edge of the SNODAS data: the lower 48 states
+         and the Canadian part of the Columbia River basin. The map is blank outside it.</p>
     </div>
 
     <div class="info-section">
