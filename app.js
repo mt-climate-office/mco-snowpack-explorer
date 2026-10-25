@@ -160,6 +160,18 @@
   if (currentDate < SNODAS_START) currentDate = SNODAS_START;
   if (currentDate > latestDate)   currentDate = latestDate;
 
+  // The basin dialog's state: which watershed is open (null when closed) and
+  // which of its two plots shows. ?basin= opens it on load; ?plot= is only
+  // written while it is open.
+  const PLOT_TYPES   = { swe: 'SWE', hypsomeswe: 'HypsomeSWE' };
+  const DEFAULT_PLOT = 'swe';
+  const isHuc = (s) => /^\d+$/.test(s || '') && HUC_LEVELS.includes(String(s).length);
+  let currentBasin = null;   // { huc, name, level }
+  let _selectedHuc = null;   // the open basin's outline on the map
+  let _focusedHuc  = null;   // the table twin's keyboard focus, shown on the map
+  let currentPlot  = PLOT_TYPES[getLower('plot')] ? getLower('plot') : DEFAULT_PLOT;
+  const askedBasin = isHuc(urlParams.get('basin')) ? urlParams.get('basin') : null;
+
   // Headless export (HOUSE-STYLE §4 ?export= convention): ?export=light|dark
   // forces the theme before the map is built, set directly rather than with
   // MCO.setTheme so a scripted run never persists a theme. ?export=true, the
@@ -213,6 +225,10 @@
     const params = { date: currentDate };
     if (currentView === 'zonal') { params.view = 'zonal'; params.huc = currentHucLevel; }
     if (currentFlavor !== DEFAULT_FLAVOR) params.flavor = currentFlavor;
+    if (currentBasin) {
+      params.basin = currentBasin.huc;
+      if (currentPlot !== DEFAULT_PLOT) params.plot = currentPlot;
+    }
     const theme = MCO.getTheme();
     if (theme !== MCO.osTheme()) params.theme = theme;
     if (_mapReady) Object.assign(params, MCO.map.cameraParamsIfDefault(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS }));
@@ -381,6 +397,8 @@
     if (currentView === 'zonal') setHucLayer();
   });
 
+  const HUC_LAYERS = ['huc-fill', 'huc-line', 'huc-focus', 'huc-selected'];
+
   // Add custom sources and layers in the correct z-order.
   // Called on initial load and after each basemap style swap.
   function addCustomLayers() {
@@ -424,6 +442,32 @@
       }, before);
     }
 
+    // The open basin's outline (--selection-ring) and the table twin's
+    // keyboard focus (--accent-line, distinct from selection), both read at
+    // paint time and re-read on every style.load, so a theme switch follows
+    // (HOUSE-STYLE §7). Feature state picks the one watershed; every other
+    // edge is drawn at zero opacity.
+    if (!map.getLayer('huc-focus')) {
+      map.addLayer({
+        id: 'huc-focus', type: 'line', source: 'huc',
+        layout: { visibility: 'none' },
+        paint: {
+          'line-color': MCO.cssVar('--accent-line'), 'line-width': 2, 'line-dasharray': [2, 1],
+          'line-opacity': ['case', ['boolean', ['feature-state', 'focused'], false], 1, 0],
+        },
+      }, before);
+    }
+    if (!map.getLayer('huc-selected')) {
+      map.addLayer({
+        id: 'huc-selected', type: 'line', source: 'huc',
+        layout: { visibility: 'none' },
+        paint: {
+          'line-color': MCO.cssVar('--selection-ring'), 'line-width': 3,
+          'line-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 1, 0],
+        },
+      }, before);
+    }
+
     // SWE COG — sits below HUC fills
     if (!map.getSource('swe')) {
       map.addSource('swe', {
@@ -443,8 +487,7 @@
     // Restore visibility for current view
     map.setLayoutProperty('swe', 'visibility', currentView === 'gridded' ? 'visible' : 'none');
     const zonalVis = currentView === 'zonal' ? 'visible' : 'none';
-    map.setLayoutProperty('huc-fill', 'visibility', zonalVis);
-    map.setLayoutProperty('huc-line', 'visibility', zonalVis);
+    for (const id of HUC_LAYERS) map.setLayoutProperty(id, 'visibility', zonalVis);
   }
 
   // The progress bar over the map for the slow steps: the date probe, the
@@ -502,6 +545,10 @@
 
     // URL-triggered export: fire only after the data layer is ready
     if (exportOnLoad) _initReady.then(exportMap);
+
+    // ?basin= opens its dialog in place: the entry already names it, so this
+    // replaces rather than pushes.
+    if (askedBasin && !exportOnLoad) openBasin(askedBasin, { push: false });
   });
 
   // Update the COG raster tiles to a new date (no-op if source not yet added).
@@ -527,7 +574,7 @@
     let d = dateStr;
     if (d < SNODAS_START)  { d = SNODAS_START;  showToast(`The earliest date is ${MCO.formatDateStr(d)}.`); }
     if (d > latestDate)    { d = latestDate;    showToast(`The latest date with data is ${MCO.formatDateStr(d)}.`); }
-    if (d === currentDate) { dateInput.value = d; return; }
+    if (d === currentDate) { dateInput.value = d; basinDate.value = d; return; }
 
     loading.start();
     if (!(await cogExists(d))) {
@@ -536,6 +583,7 @@
         loading.done();
         showToast(`No SNODAS data was found near ${MCO.formatDateStr(d)}.`, 5000);
         dateInput.value = currentDate;
+        basinDate.value = currentDate;
         return;
       }
       d = fallback;
@@ -550,6 +598,7 @@
     refreshLayers();
     fetchProvenance(currentDate).then(updateLegendMeta);
     refreshSteppers();
+    renderBasin();
   }
 
   dateInput.addEventListener('change', () => {
@@ -576,7 +625,7 @@
 
   // ── HUC zonal layers ──────────────────────────────────────────────────────
   const _fgbCache   = new Map(); // level → GeoJSON features array (with id field)
-  const _zonalCache = new Map(); // `${date}_${flavor}` → Map<zone, ptile>
+  const _zonalCache = new Map(); // `${date}_${flavor}` → Map<zone, row>, once loaded
   let _hucSourceLevel = null;    // which level is currently loaded into the 'huc' source
 
   // The vendored Parquet reader, imported once on first use. A failed import
@@ -601,21 +650,51 @@
     }
   }
 
-  // Preload all FGB boundary files into memory + Cache API in the background
+  // One level's boundaries, once (Cache API across sessions, memory within
+  // one). A failure is evicted, so the next call retries.
+  function loadFgb(level) {
+    return _cache.cached(`fgb:${level}`, async () => {
+      const res = await fetchCached(fgbUrl(level));
+      if (!res.ok) throw new Error(`FGB fetch failed: ${res.status}`);
+      const features = [];
+      for await (const f of flatgeobuf.deserialize(res.body))
+        features.push({ ...f, id: f.properties.huc });
+      _fgbCache.set(level, features);
+      return features;
+    });
+  }
+
+  // Preload all FGB boundary files in the background so zonal view is instant
   function preloadFgb() {
-    for (const lvl of HUC_LEVELS) {
-      if (_fgbCache.has(lvl)) continue;
-      (async () => {
-        try {
-          const res = await fetchCached(fgbUrl(lvl));
-          if (!res.ok) return;
-          const features = [];
-          for await (const f of flatgeobuf.deserialize(res.body))
-            features.push({ ...f, id: f.properties.huc });
-          _fgbCache.set(lvl, features);
-        } catch { /* silent — will retry on demand */ }
-      })();
-    }
+    for (const lvl of HUC_LEVELS) loadFgb(lvl).catch(() => {});   // silent — retried on demand
+  }
+
+  // One date and flavor's watershed table: zone → { ptile, swe, mean, q10,
+  // q50, q90 } (SWE in mm). The columns the map, the tooltip and the basin
+  // dialog's text alternative need, and no more: about 225 KB a file.
+  const ZONAL_COLUMNS = ['zone', 'swe_ptile', 'swe', 'mean', 'q0100', 'q0500', 'q0900'];
+  function loadZonal(date, flavor) {
+    return _cache.cached(`zonal:${date}_${flavor}`, async () => {
+      const res = await fetch(zonalUrl(date, flavor));
+      if (!res.ok) throw new Error(`Parquet fetch failed: ${res.status}`);
+      const ab = await res.arrayBuffer();
+      const pq = await parquetLib();
+      const rows = await pq.parquetReadObjects({
+        file: ab,
+        columns: ZONAL_COLUMNS,
+        compressors: { ZSTD: (input) => pq.zstdDecompress(input) },
+      });
+      const lookup = new Map();
+      for (const r of rows) {
+        if (r.zone == null) continue;
+        lookup.set(String(r.zone), {
+          ptile: r.swe_ptile ?? null, swe: r.swe ?? null, mean: r.mean ?? null,
+          q10: r.q0100 ?? null, q50: r.q0500 ?? null, q90: r.q0900 ?? null,
+        });
+      }
+      _zonalCache.set(`${date}_${flavor}`, lookup);
+      return lookup;
+    });
   }
 
   // "Nothing to show" over the map, for a date on which no watershed has a
@@ -632,56 +711,31 @@
     const level = currentHucLevel, date = currentDate;
     loading.start();
     try {
-      // ── Step 1: load FGB geometry (once per level, persisted in Cache API + memory) ──
-      if (!_fgbCache.has(level)) {
-        const res = await fetchCached(fgbUrl(level));
-        if (!res.ok) throw new Error(`FGB fetch failed: ${res.status}`);
-        const features = [];
-        for await (const f of flatgeobuf.deserialize(res.body))
-          features.push({ ...f, id: f.properties.huc });
-        _fgbCache.set(level, features);
-      }
-
-      // ── Step 2: load parquet lookup (small — cached in memory) ──
-      const key = `${date}_${currentFlavor}`;
-      if (!_zonalCache.has(key)) {
-        const res = await fetch(zonalUrl(date));
-        if (!res.ok) throw new Error(`Parquet fetch failed: ${res.status}`);
-        const ab = await res.arrayBuffer();
-        const pq = await parquetLib();
-        const lookup = new Map();
-        const rows = await pq.parquetReadObjects({
-          file: ab,
-          columns: ['zone', 'swe_ptile'],
-          compressors: { ZSTD: (input) => pq.zstdDecompress(input) },
-        });
-        for (const { zone, swe_ptile } of rows)
-          if (zone != null) lookup.set(String(zone), swe_ptile ?? null);
-        _zonalCache.set(key, lookup);
-      }
+      // ── Steps 1–2: FGB geometry (once per level) and the Parquet table ──
+      const [features, zonalData] = await Promise.all([loadFgb(level), loadZonal(date, currentFlavor)]);
       // A newer call (another date step, another level) has taken over.
       if (seq !== _hucSeq || currentView !== 'zonal') return;
 
       // ── Step 3: push geometry to source only when the level changes ──
       if (_hucSourceLevel !== level) {
-        map.getSource('huc').setData({ type: 'FeatureCollection', features: _fgbCache.get(level) });
+        map.getSource('huc').setData({ type: 'FeatureCollection', features });
         _hucSourceLevel = level;
       }
 
       // ── Step 4: push swe_ptile as feature state (no geometry re-upload) ──
-      const zonalData = _zonalCache.get(key);
+      // The open basin's outline rides along, since setData and a style
+      // reload both drop feature state.
       const rows = [];
-      for (const f of _fgbCache.get(level)) {
-        const ptile = zonalData.get(String(f.properties.huc)) ?? null;
-        map.setFeatureState({ source: 'huc', id: f.id }, { swe_ptile: ptile });
+      for (const f of features) {
+        const ptile = zonalData.get(String(f.properties.huc))?.ptile ?? null;
+        map.setFeatureState({ source: 'huc', id: f.id }, { swe_ptile: ptile, selected: String(f.id) === _selectedHuc });
         rows.push({ id: String(f.properties.huc), name: f.properties.name, huc: f.properties.huc, ptile });
       }
       renderTwin(rows);
       emptyEl.hidden = rows.some(r => r.ptile != null);
 
-      map.setLayoutProperty('huc-fill', 'visibility', 'visible');
-      map.setLayoutProperty('huc-line', 'visibility', 'visible');
-      map.setLayoutProperty('swe',      'visibility', 'none');
+      for (const id of HUC_LAYERS) map.setLayoutProperty(id, 'visibility', 'visible');
+      map.setLayoutProperty('swe', 'visibility', 'none');
       loading.done();
     } catch (err) {
       console.error('[setHucLayer]', err);
@@ -700,9 +754,16 @@
   // there and the map's label says which applies. The kit mounts it in
   // <main> and ends the caption with the row count; the level and date are
   // in the map's label, which introduces the table.
+  // selectable: the twin is the keyboard route into a basin (one Tab stop,
+  // arrows to move, Enter opens its dialog). Its buttons are visually hidden,
+  // so the visible focus indicator is on the map: the focused watershed's
+  // dashed --accent-line outline.
   const mapEl = document.getElementById('map');
   const twin = MCO.srTable({
     caption: 'Watershed SWE percentiles',
+    selectable: true,
+    onSelect: (row) => openBasin(row.huc),
+    onFocus: (row) => setFocused(row ? String(row.huc) : null),
     columns: [
       { key: 'name', label: 'Watershed', rowHeader: true },
       { key: 'huc', label: 'HUC code' },
@@ -710,11 +771,15 @@
     ],
     overflowText: (n) => `…and ${n} more watersheds. Choose a coarser HUC level to list them all.`,
   });
+  // The open basin is the twin's aria-current row.
+  function refreshTwinSelection() { twin.render(_twinRows, { selected: _selectedHuc }); }
+  let _twinRows = [];
   function renderTwin(rows) {
     if (rows) rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
-    twin.render(rows || []);
+    _twinRows = rows || [];
+    twin.render(_twinRows, { selected: _selectedHuc });
     mapEl.setAttribute('aria-label', rows
-      ? `SWE percentile map, zonal view, HUC${currentHucLevel} watersheds, ${MCO.formatDateStr(currentDate)}, ${flavorName().toLowerCase()}. The data is in the table that follows.`
+      ? `SWE percentile map, zonal view, HUC${currentHucLevel} watersheds, ${MCO.formatDateStr(currentDate)}, ${flavorName().toLowerCase()}. Click a watershed for its plots. The data is in the table that follows.`
       : 'SWE percentile map, gridded view. Click or tap the map to hear the percentile at that point.');
   }
   if (currentView !== 'zonal') renderTwin(null);
@@ -765,6 +830,7 @@
     CogProtocol.preload(cogUrl(currentDate));
     refreshLayers();
     fetchProvenance(currentDate).then(updateLegendMeta);
+    renderBasin();
   }
 
   function setView(v, { silent = false } = {}) {
@@ -782,19 +848,33 @@
       loading.done();
       emptyEl.hidden = true;
       renderTwin(null);
-      map.setLayoutProperty('swe',      'visibility', 'visible');
-      map.setLayoutProperty('huc-fill', 'visibility', 'none');
-      map.setLayoutProperty('huc-line', 'visibility', 'none');
+      map.setLayoutProperty('swe', 'visibility', 'visible');
+      for (const id of HUC_LAYERS) map.setLayoutProperty(id, 'visibility', 'none');
     } else {
       setHucLayer(); // hides swe only after a successful load
     }
   }
 
   // ── Back / Forward ────────────────────────────────────────────────────────
-  // Everything here is a view adjustment, so it is replaced, never pushed;
-  // a history move only differs from the page when an entry was written by
-  // hand. Follow it silently: the entry is already the URL.
+  // The only pushed entry is a basin dialog's opening (HOUSE-STYLE §4
+  // drill-down); everything else is replaced. So a history move opens or
+  // closes the dialog, and otherwise follows the entry silently — it is
+  // already the URL.
   MCO.onUrlState((params) => {
+    // The dialog's own close stepped Back over its entry. That entry still
+    // holds the date and normals from before it opened; the page keeps what
+    // the visitor chose inside the dialog, so rewrite it rather than follow.
+    if (_backFromClose) { _backFromClose = false; writeUrl(); return; }
+    // Back from an open dialog closes it, and only that: the date and
+    // normals chosen inside it stay, exactly as the × and Esc leave them.
+    if (basinModal.open && !isHuc(params.get('basin'))) {
+      _closingFromHistory = true;
+      currentBasin = null;   // the close event is async; this write must not carry it
+      basinModal.close();
+      MCO.announce('Basin closed');
+      writeUrl();
+      return;
+    }
     const d = params.get('date');
     if (isIsoDate(d) && d !== currentDate) setDate(d, { silent: true });
     const v = (params.get('view') || 'gridded').toLowerCase();
@@ -803,6 +883,10 @@
     const f = (params.get('flavor') || DEFAULT_FLAVOR).toLowerCase();
     if (FLAVORS[f]) setFlavor(f, { silent: true });
     if (VIEWS.includes(v)) setView(v, { silent: true });
+    const t = (params.get('plot') || DEFAULT_PLOT).toLowerCase();
+    if (PLOT_TYPES[t]) setPlotType(t, { silent: true });
+    const basin = params.get('basin');
+    if (isHuc(basin) && (!basinModal.open || currentBasin?.huc !== basin)) openBasin(basin, { push: false });
   });
 
   // ── Hover tooltip ─────────────────────────────────────────────────────────
@@ -820,7 +904,7 @@
 
   function zonalPtile(huc) {
     const zonal = _zonalCache.get(`${currentDate}_${currentFlavor}`);
-    return zonal ? (zonal.get(String(huc)) ?? null) : null;
+    return zonal?.get(String(huc))?.ptile ?? null;
   }
 
   map.on('mousemove', async (e) => {
@@ -847,19 +931,14 @@
 
   map.on('mouseout', () => tooltip.classList.remove('visible'));
 
-  // Click or tap pins a reading and announces it, in both views: it is the
-  // touch path and the assistive-tech path to a value, since a hover tooltip
-  // is never surfaced.
+  // A click or tap on a watershed opens its basin dialog. On the gridded
+  // raster it pins a reading and announces it: the touch path and the
+  // assistive-tech path to a value, since a hover tooltip is never surfaced.
   map.on('click', async (e) => {
     if (currentView === 'zonal') {
       const hits = map.queryRenderedFeatures(e.point, { layers: ['huc-fill'] });
       if (!hits.length) return;
-      const { name, huc } = hits[0].properties;
-      const label = name || `HUC${currentHucLevel} ${huc}`;
-      const ptile = zonalPtile(huc);
-      pinReading(ptile != null
-        ? `${label}: ${ordinal(Math.round(ptile))} percentile`
-        : `${label}: no data`);
+      openBasin(String(hits[0].properties.huc));
       return;
     }
 
@@ -871,6 +950,330 @@
       ? `No snowpack data at ${where}`
       : `${ordinal(value)} percentile at ${where}`);
   });
+
+  // ── Basin dialog ──────────────────────────────────────────────────────────
+  // One watershed's SWE or HypsomeSWE plot, the PNGs mco-snodas renders per
+  // date, flavor and HUC (plots/{date}/{flavor}/{type}/usdm/{huc}.png, with
+  // plots/{date}/index.json written last as the "date complete" marker).
+  // The dialog has no state of its own beyond the basin and the plot type:
+  // its date and normals controls call the page's setDate / setFlavor, and
+  // those setters update every control bound to them, so the dialog and the
+  // map behind it can't drift apart.
+  const PLOTS_ROOT = `${DATA_HOST}/snodas/plots`;
+  const PLOT_STYLE = 'usdm';
+  const basinModal    = document.getElementById('basin-modal');
+  const basinCtl      = MCO.initInfoModal({ dialog: basinModal });
+  const basinTitle    = document.getElementById('basin-title');
+  const basinSubtitle = document.getElementById('basin-subtitle');
+  const basinDate     = document.getElementById('basin-date');
+  const basinFlavorFs = document.getElementById('basin-flavor-btns');
+  const basinPlotFs   = document.getElementById('basin-plot-btns');
+  const basinFrame    = document.getElementById('basin-frame');
+  const basinImg      = document.getElementById('basin-img');
+  const basinEmpty    = document.getElementById('basin-empty');
+  const basinCaption  = document.getElementById('basin-caption');
+  const basinData     = document.getElementById('basin-data');
+  const basinTable    = document.getElementById('basin-table');
+
+  basinDate.min = SNODAS_START;
+  basinDate.max = latestDate;
+  basinDate.value = currentDate;
+  basinDate.addEventListener('change', () => {
+    if (isIsoDate(basinDate.value)) setDate(basinDate.value);
+    else basinDate.value = currentDate;
+  });
+  steppers.push(MCO.initStepper({
+    prev: document.getElementById('btn-basin-prev'), next: document.getElementById('btn-basin-next'), ...stepperOpts,
+  }));
+  basinFlavorFs.addEventListener('change', (e) => setFlavor(e.target.value));
+  basinPlotFs.addEventListener('change', (e) => setPlotType(e.target.value));
+
+  function checkRadio(fieldset, value) {
+    for (const r of fieldset.querySelectorAll('input[type="radio"]')) r.checked = r.value === value;
+  }
+  function syncBasinControls() {
+    basinDate.value = currentDate;
+    checkRadio(basinFlavorFs, currentFlavor);
+    checkRadio(basinPlotFs, currentPlot);
+  }
+
+  function setPlotType(t, { silent = false } = {}) {
+    if (!PLOT_TYPES[t] || t === currentPlot) return;
+    currentPlot = t;
+    checkRadio(basinPlotFs, t);
+    if (!currentBasin) return;
+    if (!silent) { writeUrl(); MCO.announce(`${PLOT_TYPES[t]} plot`); }
+    renderBasin();
+  }
+
+  // ── Selection and keyboard focus on the map ──
+  function setHucState(prev, next, key) {
+    if (!map.getSource('huc')) return;
+    if (prev != null) map.setFeatureState({ source: 'huc', id: prev }, { [key]: false });
+    if (next != null) map.setFeatureState({ source: 'huc', id: next }, { [key]: true });
+  }
+  function setSelected(huc) { setHucState(_selectedHuc, huc, 'selected'); _selectedHuc = huc; }
+  function setFocused(huc)  { setHucState(_focusedHuc, huc, 'focused');   _focusedHuc = huc; }
+
+  // ── Opening and closing ──
+  // Opening is drill-down (HOUSE-STYLE §4): the first step pushes a history
+  // entry marked {mcoDetail}, so Back closes the dialog; changes made while
+  // it is open replace that entry. A basin opens the zonal view at its own
+  // level, so the outline behind the dialog is the watershed it shows.
+  async function openBasin(huc, { push = true } = {}) {
+    huc = String(huc);
+    if (!isHuc(huc)) return;
+    const level = huc.length;
+    let feature = null;
+    try { feature = (await loadFgb(level)).find(f => String(f.properties.huc) === huc); } catch { /* below */ }
+    if (!feature) { showToast(`No HUC${level} watershed ${huc} was found.`); return; }
+    const wasOpen = basinModal.open;
+    currentBasin = { huc, name: feature.properties.name || `HUC${level} ${huc}`, level };
+    if (currentView !== 'zonal') setView('zonal', { silent: true });
+    if (level !== currentHucLevel) setHucLevel(level, { silent: true });
+    setSelected(huc);
+    refreshTwinSelection();
+    writeUrl(push && !wasOpen ? { push: true, state: { mcoDetail: huc } } : {});
+    if (!wasOpen) basinCtl.open();
+    renderBasin();
+  }
+
+  // Close (×, Esc, backdrop or Back) has one path. If this dialog pushed its
+  // entry, step Back over it, so the close button and the browser's Back
+  // land on the same entry and Forward reopens it; when Back itself closed
+  // it, the URL is already right.
+  let _closingFromHistory = false, _backFromClose = false;
+  basinModal.addEventListener('close', () => {
+    currentBasin = null;
+    _basinSeq++;
+    setSelected(null);
+    refreshTwinSelection();
+    if (_closingFromHistory) _closingFromHistory = false;
+    else if (history.state && history.state.mcoDetail) { _backFromClose = true; history.back(); }
+    else writeUrl();
+    // A dialog opened from a deep link has no opener; never leave focus on
+    // <body>. The browser restores focus after this event, hence the tick.
+    setTimeout(() => {
+      if (!document.activeElement || document.activeElement === document.body) mainEl.focus();
+    }, 0);
+  });
+
+  // ── Which dates have plots ──
+  // index.json is memoised per date, hits and misses alike. The list of
+  // dates comes from one anonymous S3 listing of plots/, cached for the
+  // session (mco-snodas publishes no catalog of plot dates yet).
+  function plotIndex(d) {
+    return _cache.cached(`plots:${d}`, () => MCO.fetchJSON(`${PLOTS_ROOT}/${d}/index.json`).catch(() => null));
+  }
+  function plotDates() {
+    return _cache.cached('plots:dates', async () => {
+      const dates = [];
+      let token = null;
+      do {
+        const q = new URLSearchParams({ 'list-type': '2', prefix: 'plots/', delimiter: '/' });
+        if (token) q.set('continuation-token', token);
+        const res = await fetch(`${DATA_HOST}/snodas/?${q}`);
+        if (!res.ok) throw new Error(`plot listing failed: ${res.status}`);
+        const xml = new DOMParser().parseFromString(await res.text(), 'application/xml');
+        for (const el of xml.getElementsByTagName('Prefix')) {
+          const m = /^plots\/(\d{4}-\d{2}-\d{2})\/$/.exec(el.textContent);
+          if (m) dates.push(m[1]);
+        }
+        token = xml.getElementsByTagName('IsTruncated')[0]?.textContent === 'true'
+          ? xml.getElementsByTagName('NextContinuationToken')[0]?.textContent : null;
+      } while (token);
+      return dates.sort();
+    }).catch(() => []);
+  }
+  // The closest date to d whose plots are complete (its index.json exists).
+  async function nearestPlotDate(d) {
+    const t = (x) => new Date(`${x}T12:00:00`).getTime();
+    const ranked = (await plotDates())
+      .filter(x => x !== d && x >= SNODAS_START && x <= latestDate)
+      .sort((a, b) => Math.abs(t(a) - t(d)) - Math.abs(t(b) - t(d)));
+    for (const x of ranked.slice(0, 5)) if (await plotIndex(x)) return x;
+    return null;
+  }
+
+  // Resolves true once the image has decoded, false on a 404 or a network
+  // failure. Remembered per URL, so stepping back and forth doesn't refetch.
+  const _imgOk = new Map();
+  function loadImage(url) {
+    if (!_imgOk.has(url)) {
+      _imgOk.set(url, new Promise(resolve => {
+        const img = new Image();
+        img.onload  = () => resolve(true);
+        img.onerror = () => { _imgOk.delete(url); resolve(false); };
+        img.src = url;
+      }));
+    }
+    return _imgOk.get(url);
+  }
+  const plotUrl = (idx, d, flavor, type, huc) => `${PLOTS_ROOT}/${d}/` + (idx.path || '{flavor}/{type}/{style}/{huc}.png')
+    .replace('{flavor}', flavor).replace('{type}', type).replace('{style}', PLOT_STYLE).replace('{huc}', huc);
+
+  // ── Numbers for the text alternative and the table ──
+  const fmtSwe = (v) => (v == null || Number.isNaN(v) ? '—' : `${Math.round(v)} mm (${(v / 25.4).toFixed(1)} in)`);
+  const fmtPtile = (v) => (v == null || Number.isNaN(v) ? '—' : `${ordinal(Math.round(v))} percentile`);
+
+  function plotAlt(row, date) {
+    const { name, huc, level } = currentBasin;
+    const flavor = flavorName().toLowerCase();
+    const head = currentPlot === 'swe'
+      ? `Seasonal snow water equivalent for ${name} (HUC${level} ${huc}) through the snow year, drawn against the range of ${flavor}.`
+      : `Snow water equivalent by 100-foot elevation band for ${name} (HUC${level} ${huc}), with each band's percentile and share of its median, against ${flavor}.`;
+    const now = row && row.swe != null
+      ? ` On ${MCO.formatDateStr(date)} the basin held ${fmtSwe(row.swe)}${row.ptile != null ? `, the ${fmtPtile(row.ptile)}` : ''}; the median for that date is ${fmtSwe(row.q50)}.`
+      : ` There is no observation for ${MCO.formatDateStr(date)}.`;
+    return `${head}${now} The numbers are in the data table below the plot.`;
+  }
+
+  function factsTable(caption, rows) {
+    return h('table', {},
+      h('caption', { className: 'sr-only', textContent: caption }),
+      h('tbody', {}, ...rows.map(([k, v]) => h('tr', {},
+        h('th', { scope: 'row', textContent: k }), h('td', { textContent: v })))));
+  }
+
+  // HypsomeSWE bands: one row per zone × 100-ft band in a ~6.8 MB file with a
+  // single row group, so nothing can be skipped by zone. Reading only the
+  // five columns the table shows, by HTTP range requests, is ~0.85 MB, and it
+  // happens only when someone opens the table.
+  const BAND_COLUMNS = ['zone', 'swe_elevation', 'swe', 'swe_ptile', 'q0500'];
+  function loadBands(date, flavor) {
+    return _cache.cached(`bands:${date}_${flavor}`, async () => {
+      const pq = await parquetLib();
+      const url = `${ZONAL_ROOT}/${flavor}/${date}/${date}_${flavor}_hypsomeswe_normals.parquet`;
+      const file = await pq.asyncBufferFromUrl({ url });
+      const rows = await pq.parquetReadObjects({
+        file, columns: BAND_COLUMNS,
+        compressors: { ZSTD: (input) => pq.zstdDecompress(input) },
+      });
+      const byZone = new Map();
+      for (const r of rows) {
+        const z = String(r.zone);
+        if (!byZone.has(z)) byZone.set(z, []);
+        byZone.get(z).push(r);
+      }
+      return byZone;
+    });
+  }
+
+  async function renderBandTable(seq) {
+    const { huc, name } = currentBasin;
+    const date = currentDate, flavor = currentFlavor;
+    basinTable.replaceChildren(h('p', { textContent: 'Loading the elevation bands…' }));
+    let bands;
+    try { bands = (await loadBands(date, flavor)).get(huc) || []; } catch (err) {
+      console.error('[bands]', err);
+      if (seq !== _basinSeq) return;
+      basinTable.replaceChildren(h('p', { textContent: 'The elevation bands failed to load. Close and reopen this table to try again.' }));
+      return;
+    }
+    if (seq !== _basinSeq) return;
+    if (!bands.length) { basinTable.replaceChildren(h('p', { textContent: 'This basin has no elevation band data for this date.' })); return; }
+    const num = (v) => (v == null || Number.isNaN(v) ? '—' : Math.round(v).toLocaleString('en-US'));
+    const sorted = bands.slice().sort((a, b) => b.swe_elevation - a.swe_elevation);
+    basinTable.replaceChildren(h('div', { className: 'band-scroll' }, h('table', {},
+      h('caption', { className: 'sr-only', textContent: `Snow water equivalent by elevation band, ${name}, ${MCO.formatDateStr(date)}, ${flavorName(flavor).toLowerCase()}` }),
+      h('thead', {}, h('tr', {}, ...['Elevation (ft)', 'SWE (mm)', 'Percentile', 'Median SWE (mm)']
+        .map(t => h('th', { scope: 'col', textContent: t })))),
+      h('tbody', {}, ...sorted.map(r => h('tr', {},
+        h('th', { scope: 'row', textContent: `${num(r.swe_elevation)}–${num(r.swe_elevation + 100)}` }),
+        h('td', { textContent: num(r.swe) }),
+        h('td', { textContent: r.swe_ptile == null ? '—' : ordinal(Math.round(r.swe_ptile)) }),
+        h('td', { textContent: num(r.q0500) })))))));
+  }
+
+  function renderDataTable(row, seq) {
+    if (currentPlot === 'hypsomeswe') {
+      if (basinData.open) renderBandTable(seq);
+      else basinTable.replaceChildren(h('p', { textContent: 'Open this table to load the elevation bands.' }));
+      return;
+    }
+    const { name } = currentBasin;
+    basinTable.replaceChildren(factsTable(`${name}, ${MCO.formatDateStr(currentDate)}, ${flavorName().toLowerCase()}`, [
+      ['Observed SWE', fmtSwe(row?.swe)],
+      ['Percentile', row?.ptile == null ? '—' : ordinal(Math.round(row.ptile))],
+      ['Median for this date', fmtSwe(row?.q50)],
+      ['Normal range (10th–90th percentile)', row ? `${fmtSwe(row.q10)} to ${fmtSwe(row.q90)}` : '—'],
+      ['Mean for this date', fmtSwe(row?.mean)],
+    ]));
+  }
+  basinData.addEventListener('toggle', () => {
+    if (basinData.open && currentBasin && currentPlot === 'hypsomeswe') renderBandTable(_basinSeq);
+  });
+
+  function showBasinEmpty(text, action) {
+    basinImg.hidden = true;
+    basinCaption.textContent = '';
+    const kids = [h('p', { textContent: text })];
+    // The button disappears with the message it answers, so its action says
+    // where focus goes next — never left to fall to <body>.
+    if (action) kids.push(h('button', { type: 'button', className: 'nav-btn', textContent: action.label,
+      onclick: () => { action.focus?.focus(); action.onClick(); } }));
+    basinEmpty.replaceChildren(...kids);
+    basinEmpty.hidden = false;
+    MCO.announce(text);
+  }
+
+  // Draw whatever the page's date and normals and the dialog's plot type
+  // now name. Every await re-checks the sequence, so a fast stepper never
+  // lands an old plot over a newer one.
+  let _basinSeq = 0;
+  async function renderBasin() {
+    if (!currentBasin) return;
+    const seq = ++_basinSeq;
+    const { huc, name, level } = currentBasin;
+    const date = currentDate, flavor = currentFlavor, type = currentPlot;
+    syncBasinControls();
+    basinTitle.textContent = name;
+    basinSubtitle.textContent = `HUC${level} · ${huc}`;
+    basinFrame.setAttribute('aria-busy', 'true');
+
+    const [idx, zonal] = await Promise.all([plotIndex(date), loadZonal(date, flavor).catch(() => null)]);
+    if (seq !== _basinSeq) return;
+    const row = zonal?.get(huc) ?? null;
+    renderDataTable(row, seq);
+
+    if (!idx || (idx.flavors && !idx.flavors.includes(flavor))) {
+      const near = await nearestPlotDate(date);
+      if (seq !== _basinSeq) return;
+      basinFrame.removeAttribute('aria-busy');
+      showBasinEmpty(`Basin plots aren't available for ${MCO.formatDateStr(date)} yet.`,
+        near && { label: `Show ${MCO.formatDateStr(near)}`, onClick: () => setDate(near), focus: basinDate });
+      return;
+    }
+
+    const url = plotUrl(idx, date, flavor, type, huc);
+    const ok = await loadImage(url);
+    if (seq !== _basinSeq) return;
+    basinFrame.removeAttribute('aria-busy');
+    if (!ok) {
+      // mco-snodas skips the HypsomeSWE plot for a basin with no snow now and
+      // none in its normals; the other flavors may still have one.
+      if (type === 'hypsomeswe') {
+        showBasinEmpty(`There is no HypsomeSWE plot for ${name} on ${MCO.formatDateStr(date)}: it has no snow on that date and none in its ${flavorName(flavor).toLowerCase()}.`,
+          { label: 'Show the SWE plot', onClick: () => setPlotType('swe'), focus: basinPlotFs.querySelector('input[value="swe"]') });
+      } else {
+        showBasinEmpty(`The plot for ${name} failed to load.`, { label: 'Retry', onClick: renderBasin, focus: basinDate });
+      }
+      return;
+    }
+    basinEmpty.hidden = true;
+    basinImg.alt = plotAlt(row, date);
+    basinImg.src = url;
+    basinImg.hidden = false;
+    const years = idx.reference_water_years;
+    // The full-size image in a new tab: on a phone the plot is a thumbnail.
+    basinCaption.replaceChildren(`${PLOT_TYPES[type]} · ${MCO.formatDateStr(date)} · ${flavorName(flavor)}`
+      + (Array.isArray(years) && years.length ? ` from snow years ${years[0]}–${years[years.length - 1]}` : '')
+      + '. ', h('a', { href: url, target: '_blank', rel: 'noopener', textContent: 'Open the full-size plot' }), '.');
+
+    // Warm the neighbours a visitor is likely to ask for next.
+    for (const f of Object.keys(FLAVORS)) for (const t of Object.keys(PLOT_TYPES))
+      if (f !== flavor || t !== type) loadImage(plotUrl(idx, date, f, t, huc));
+  }
 
   // ── Share ─────────────────────────────────────────────────────────────────
   // Copy the current (deep-link) URL. The async Clipboard API where available,
@@ -1124,7 +1527,7 @@
   // not over another dialog, and never once the visitor has started using
   // the page — focus has left <body> (WCAG 3.2.1). The seen flag is written
   // at open time, so an unclosed dialog still counts.
-  const DEEP_LINK_PARAMS = ['date', 'view', 'huc', 'flavor', 'lng', 'export'];
+  const DEEP_LINK_PARAMS = ['date', 'view', 'huc', 'flavor', 'basin', 'lng', 'export'];
   const hasDeepLink = DEEP_LINK_PARAMS.some(k => urlParams.has(k));
   const seenIntro = MCO.lsGet(LS_INFO_SEEN) === '1' || MCO.lsGet(LS_INFO_SEEN_OLD) === '1';
   if (!seenIntro && !hasDeepLink) {

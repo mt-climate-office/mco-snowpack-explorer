@@ -9,7 +9,8 @@
        worker-src needs BOTH blob: and unpkg: MapLibre 6 starts its worker from
        a blob: URL that then imports the worker chunk from unpkg, and with
        blob: alone the basemap draws while no GeoJSON layer ever does.
-       img-src allows jsDelivr for the kit-hosted favicons (kit 0.9.0).
+       img-src allows jsDelivr for the kit-hosted favicons (kit 0.9.0) and
+       the data host for the basin plots (PNGs beside the data).
        connect-src carries every host MapLibre and the app FETCH from: the
        CloudFront origin serving COG rasters, FlatGeobuf boundaries and Parquet
        zonal stats, the CARTO basemap and the hillshade DEM on s3.amazonaws.com.
@@ -22,7 +23,7 @@
     worker-src blob: https://unpkg.com;
     style-src 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
     font-src https://cdn.jsdelivr.net;
-    img-src 'self' data: blob: https://cdn.jsdelivr.net;
+    img-src 'self' data: blob: https://cdn.jsdelivr.net https://data2.climate.umt.edu;
     connect-src 'self' https://data2.climate.umt.edu https://d1s8jav5n0eyyf.cloudfront.net https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://s3.amazonaws.com;
     base-uri 'none';
     form-action 'none'">
@@ -229,6 +230,40 @@
       margin-top: 0.4rem;
     }
 
+    /* ── Basin dialog ──────────────────────────────────────────────────────────
+       The kit's dialog shell, wider: the plots are 3:2 at 2400×1600 and
+       unreadable at the shell's 540px. */
+    /* kit-override: .info-modal-box width, for the 3:2 plots. */
+    .info-modal-box.basin-box { width: min(980px, calc(100vw - 4rem)); }
+    .basin-controls {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.25rem;
+      margin-bottom: 0.9rem;
+    }
+    .basin-figure { margin: 0; }
+    /* The plots are drawn on white in every theme, so the frame is a fixed
+       aspect box: no layout jump while one loads, and an empty state the
+       same size as the plot it stands in for. */
+    .basin-frame {
+      position: relative; aspect-ratio: 3 / 2; width: 100%;
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      background: var(--bg-deep); overflow: hidden;
+    }
+    .basin-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+    /* kit-override: the empty state fills the plot's frame instead of
+       sitting in flow, so the dialog doesn't change height. */
+    .basin-frame .mco-empty {
+      position: absolute; inset: 0; margin: 0; border: 0; border-radius: 0;
+      flex-direction: column; gap: 0.75rem;
+    }
+    .basin-caption { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.4rem; }
+    .basin-caption a { color: var(--text-secondary); }
+    .basin-data { margin-top: 0.9rem; font-size: 0.8rem; }
+    .basin-data summary { cursor: pointer; font-weight: 600; color: var(--text-secondary); }
+    .basin-data table { border-collapse: collapse; margin-top: 0.5rem; font-variant-numeric: tabular-nums; }
+    .basin-data th, .basin-data td { padding: 2px 10px 2px 0; text-align: right; border-bottom: 1px solid var(--border); }
+    .basin-data th[scope="row"], .basin-data thead th:first-child { text-align: left; }
+    .basin-data .band-scroll { max-height: 40dvh; overflow-y: auto; }
+
     /* ── Responsive ────────────────────────────────────────────────────────── */
     /* Breakpoints 1400 (labels, segmented → select) / 1060 (chrome) / 750
        (brand lockup) are the kit's ladder. With the zonal view's three groups
@@ -279,6 +314,7 @@
          controls (kit MIGRATING.md § Gotchas). */
       input[type="date"], select.nav-select { height: 40px; line-height: 40px; }
       .legend-row { min-height: 32px; }
+      .basin-data summary { min-height: 40px; display: flex; align-items: center; }
       /* Two stacked 15px buttons are untappable — lay the stepper out as a
          pair of 40px targets (previous left, next right) instead. */
       .date-step-btns { flex-direction: row; gap: 4px; }
@@ -581,6 +617,78 @@
       <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
     </div>
     <div id="provenance-content"></div>
+  </div>
+</dialog>
+
+<!-- One basin's plot, opened by clicking a watershed in the zonal view (or
+     Enter on its row in the table twin). Date and normals are the page's own
+     state — changing them here moves the map behind the dialog too; the plot
+     type is this dialog's. Opening pushes a history entry, so Back closes it.
+     The title is filled at open time; the dialog is named by it. -->
+<dialog id="basin-modal" class="mco-modal" aria-labelledby="basin-title">
+  <div class="info-modal-box basin-box">
+    <div class="info-modal-header">
+      <div>
+        <h2 class="info-modal-title" id="basin-title">Watershed</h2>
+        <p class="info-modal-subtitle" id="basin-subtitle"></p>
+      </div>
+      <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
+    </div>
+
+    <div class="basin-controls">
+      <div class="control-group">
+        <label class="control-label" for="basin-date">Date</label>
+        <div class="date-stepper">
+          <input type="date" id="basin-date">
+          <div class="date-step-btns">
+            <button type="button" class="nav-btn mco-step date-step" id="btn-basin-prev" aria-label="Previous day">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            <button type="button" class="nav-btn mco-step date-step" id="btn-basin-next" aria-label="Next day">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="18 15 12 9 6 15"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="control-label" aria-hidden="true">Normals</span>
+        <fieldset class="seg-btns is-radio" id="basin-flavor-btns">
+          <legend class="sr-only">Normals</legend>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="zig_smooth" checked>Smoothed</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="zig">Fitted</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="ecdf">Empirical</label>
+        </fieldset>
+      </div>
+      <div class="control-group">
+        <span class="control-label" aria-hidden="true">Plot</span>
+        <fieldset class="seg-btns is-radio" id="basin-plot-btns">
+          <legend class="sr-only">Plot</legend>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="swe" checked>SWE</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="hypsomeswe">HypsomeSWE</label>
+        </fieldset>
+      </div>
+    </div>
+
+    <figure class="basin-figure">
+      <div class="basin-frame" id="basin-frame">
+        <!-- 1×1 transparent placeholder: src="" would re-request the page. -->
+        <img id="basin-img" alt="" width="2400" height="1600"
+             src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
+        <div class="mco-empty" id="basin-empty" hidden></div>
+      </div>
+      <figcaption class="basin-caption" id="basin-caption"></figcaption>
+    </figure>
+
+    <details class="basin-data" id="basin-data">
+      <summary>Data for this plot</summary>
+      <div id="basin-table"></div>
+    </details>
   </div>
 </dialog>
 
