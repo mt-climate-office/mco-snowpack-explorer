@@ -151,7 +151,9 @@
   const askedDate = isIsoDate(urlParams.get('date')) ? urlParams.get('date') : null;
   let currentDate     = askedDate || latestDate;
   let currentView     = VIEWS.includes(getLower('view')) ? getLower('view') : 'gridded';
-  let currentHucLevel = (() => { const v = parseInt(urlParams.get('huc'), 10); return HUC_LEVELS.includes(v) ? v : 2; })();
+  // HUC8, the finest level, is the zonal view's default.
+  const DEFAULT_HUC = 8;
+  let currentHucLevel = (() => { const v = parseInt(urlParams.get('huc'), 10); return HUC_LEVELS.includes(v) ? v : DEFAULT_HUC; })();
   // ?method=zig|ecdf is how the flavor was spelled before it had a control;
   // an old link still lands on the flavor it named.
   let currentFlavor = FLAVORS[getLower('flavor')] ? getLower('flavor')
@@ -223,7 +225,10 @@
   // (MCO.osTheme()). A legacy ?method= is not carried forward.
   function writeUrl({ push = false, state } = {}) {
     const params = { date: currentDate };
-    if (currentView === 'zonal') { params.view = 'zonal'; params.huc = currentHucLevel; }
+    if (currentView === 'zonal') {
+      params.view = 'zonal';
+      if (currentHucLevel !== DEFAULT_HUC) params.huc = currentHucLevel;
+    }
     if (currentFlavor !== DEFAULT_FLAVOR) params.flavor = currentFlavor;
     if (currentBasin) {
       params.basin = currentBasin.huc;

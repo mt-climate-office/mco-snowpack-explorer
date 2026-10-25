@@ -96,6 +96,13 @@ export default {
       await close();
     }
     {
+      const { page, close } = await open('?date=2026-02-15&view=zonal', { ready: painted, timeout: 45000 });
+      const r = await page.evaluate(() => ({ q: location.search, checked: document.querySelector('#huc-btns input:checked').value,
+        first: document.querySelector('#huc-btns input').value }));
+      check('URL: the zonal view defaults to HUC8, listed first, and elides ?huc=', r.checked === '8' && r.first === '8' && !/huc=/.test(r.q), JSON.stringify(r));
+      await close();
+    }
+    {
       const { page, close } = await open('?date=2026-02-15&method=ecdf', { ready: painted, timeout: 45000 });
       const r = await page.evaluate(() => ({ q: location.search, checked: document.querySelector('#flavor-btns input:checked').value }));
       check('URL: legacy ?method=ecdf lands on Empirical and is rewritten as ?flavor=', r.checked === 'ecdf' && /flavor=ecdf/.test(r.q) && !/method=/.test(r.q), JSON.stringify(r));

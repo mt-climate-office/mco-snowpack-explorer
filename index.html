@@ -419,19 +419,19 @@
         <span class="control-label" aria-hidden="true">Level</span>
         <fieldset class="seg-btns is-radio" id="huc-btns">
           <legend class="sr-only">Watershed level</legend>
-          <label class="nav-btn seg-btn"><input type="radio" name="huc" value="2" checked>HUC2</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="huc" value="4">HUC4</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="huc" value="8" checked>HUC8</label>
           <label class="nav-btn seg-btn"><input type="radio" name="huc" value="6">HUC6</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="huc" value="8">HUC8</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="huc" value="4">HUC4</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="huc" value="2">HUC2</label>
         </fieldset>
       </div>
       <div class="control-group select-group">
         <label class="control-label" for="huc-select">Level</label>
         <select class="nav-select" id="huc-select" aria-label="Watershed level" hidden>
-          <option value="2">HUC2</option>
-          <option value="4">HUC4</option>
-          <option value="6">HUC6</option>
           <option value="8">HUC8</option>
+          <option value="6">HUC6</option>
+          <option value="4">HUC4</option>
+          <option value="2">HUC2</option>
         </select>
       </div>
     </div>
@@ -585,7 +585,7 @@
       <ul>
         <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg></span><strong>Date</strong>. Pick a day, or step one day at a time with ▲ and ▼.</li>
         <li><strong>View</strong>. Gridded shows every 1&thinsp;km cell. Zonal averages over watersheds, from
-            the largest (HUC2 regions) to the smallest (HUC8 subbasins); choose the size with Level.</li>
+            the smallest (HUC8 subbasins, the default) to the largest (HUC2 regions); choose the size with Level.</li>
         <li><strong>Normals</strong>. The past years each day is measured against. Smoothed is the default;
             the three choices are explained below.</li>
         <li><strong>Click or tap the map</strong>. In the gridded view this reads out the percentile at that

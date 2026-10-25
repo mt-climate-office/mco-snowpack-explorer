@@ -55,7 +55,7 @@ are left out of the URL.
 |---|---|---|
 | `date` | `YYYY-MM-DD` | the newest published date (always written) |
 | `view` | `gridded`, `zonal` | `gridded` |
-| `huc` | `2`, `4`, `6`, `8` (zonal view only) | `2` |
+| `huc` | `8`, `6`, `4`, `2` (zonal view only) | `8` |
 | `flavor` | `zig_smooth`, `zig`, `ecdf` | `zig_smooth` |
 | `basin` | a HUC code, e.g. `1002`; opens its plot dialog | none |
 | `plot` | `swe`, `hypsomeswe` (with `basin`) | `swe` |
