@@ -124,186 +124,170 @@
         crossorigin="anonymous">
 
   <style>
-    /* ── App-owned palette ───────────────────────────────────────────────
-       The kit owns the palette now. Only ONE token differed: --text-dim was
-       #6b7a90 / #7a8190, the drift HOUSE-STYLE §2 names as failing AA at
-       subtitle size — the fourth app found carrying it. Adopting the kit also
-       brings the high-contrast theme, which this page had no values for. */
-    /* ── App shell ───────────────────────────────────────────────────────
-       Reset, reduced-motion clamp, [hidden] priority, .sr-only and the one
-       universal :focus-visible ring are the kit's. What is left is this app's
-       own frame: navbar is a fixed strip, the map takes the rest. */
-    body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
-    /* ── Navbar (app-specific remainder) ─────────────────────────────────
-       The kit owns .mco-navbar and its gradient underline, the logo/divider/
-       brand lockup and its ≤750px collapse, .nav-btn (+ .icon-only,
-       [aria-pressed], [disabled]), .mco-btn-info, .nav-meta and the .seg-btn
-       group. Several rules here differed only by using --border where the kit
-       uses --ctrl-border, and --accent where it uses --accent-line: the kit
-       values win (§2 — --accent is a FILL colour and only clears ~2.3:1 as a
-       border on dark). .seg-btn also grows 28px → 30px. */
-    .controls { display: flex; align-items: center; gap: 0.6rem; margin-right: auto; }
+    /* ════════════════════════════════════════════════════════════════════
+       App-specific styles ONLY. Tokens, reset, a11y utilities, the navbar
+       and its shed ladder, segmented groups, the glass panel and legend
+       swatches, dialogs, notices, toasts and MapLibre polish all come from
+       mco-web-style. Anything below is either this app's own layout or a
+       marked kit-override. The control-group / date-stepper / info-icon
+       rules are the photo explorer's, near byte for byte: both apps carry
+       them, so they are a kit proposal, not a reason to diverge here.
+       ════════════════════════════════════════════════════════════════════ */
 
-    /* These four are THIS APP's, and deleting the navbar section wholesale took
-       them with it — which collapsed the one-row control bar into a ~145px
-       stack: labels above their controls and the date steppers below the input
-       instead of beside it. .control-label IS a kit class, but the kit only
-       styles it inside its own shed rule, so the base treatment stays here. */
-    .control-group   { display: flex; align-items: center; gap: 0.3rem; }
-    .control-label   {
+    /* ── App frame (layout only — fonts/colors come from the kit) ─────────── */
+    body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+    #main { flex: 1; min-height: 0; position: relative; }
+    /* Programmatic focus from the skip link shouldn't ring the whole page; the
+       kit's universal :focus-visible rule is untouched. */
+    main:focus { outline: none; }
+
+    /* ── Map ───────────────────────────────────────────────────────────────── */
+    #map { width: 100%; height: 100%; background: var(--bg-deep); }
+
+    /* ── Navbar control groups (app-owned labels + inputs) ─────────────────── */
+    .control-group { display: flex; align-items: center; gap: 0.3rem; }
+    /* kit-override: the kit styles .control-label only inside its own shed
+       rule; the base treatment is app-owned (as in the photo explorer). */
+    .control-label {
       font-size: 0.7rem; font-weight: 500; letter-spacing: 0.05em;
       text-transform: uppercase; color: var(--text-muted); white-space: nowrap;
     }
-    .date-stepper    { display: flex; align-items: center; gap: 4px; }
-    .date-step-btns  { display: flex; flex-direction: column; gap: 2px; }
-    /* Overrides the kit's 34px .nav-btn minimum: two of these stack beside the
-       date input and must fit the one-row bar. Deleting this rule with the
-       navbar section is what inflated the navbar from 52px to 150px. */
+
+    /* Date input and the narrow-screen selects. --ctrl-border for interactive
+       edges, --accent-line for the hover/focus edge (both ≥3:1 — WCAG 1.4.11). */
+    input[type="date"], select.nav-select {
+      background: none; color: var(--text-primary);
+      border: 1px solid var(--ctrl-border); border-radius: var(--radius-md);
+      padding: 0 0.55rem; font-size: 0.78rem; font-family: inherit;
+      cursor: pointer; height: 34px; line-height: 34px;
+      -webkit-appearance: none; appearance: none;
+      transition: var(--transition);
+    }
+    /* The UA calendar glyph ships dark, like the MapLibre control icons — reuse
+       the kit's icon filter so it inverts in dark AND high-contrast. */
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: var(--ctrl-icon-filter, none); cursor: pointer;
+    }
+    input[type="date"]:hover, select.nav-select:hover { background: var(--accent-hover); border-color: var(--accent-line); }
+    input[type="date"]:focus, select.nav-select:focus { border-color: var(--accent-line); background: var(--accent-hover); }
+
+    /* Date stepper: ▲/▼ stacked beside the date input. Previous comes first
+       in the DOM (and the Tab order); column-reverse draws next on top. */
+    .date-stepper { display: flex; align-items: center; gap: 4px; }
+    .date-step-btns { display: flex; flex-direction: column-reverse; gap: 2px; }
+    /* kit-override: the kit's 34px .nav-btn minimum. Two of these stack
+       beside the date input and must fit the one-row bar. */
     .nav-btn.date-step {
       padding: 0 4px; min-height: 0; height: 15px; min-width: 20px;
       border-radius: var(--radius-sm); justify-content: center;
     }
-    .nav-actions { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
-    .info-icon {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 18px; height: 18px; border-radius: var(--radius-sm);
-      background: var(--accent-hover); border: 1px solid var(--ctrl-border);
-      color: var(--text-secondary); vertical-align: middle;
-      margin-right: 0.35rem; flex-shrink: 0;
-    }
+
+    /* Narrow-screen fallback for the segmented groups (HOUSE-STYLE §3; the
+       photo explorer's pattern). MCO.initSegmentedFallback puts [hidden] on
+       whichever of the fieldset / <select> is not in use (≤1400px → the
+       select); each wrapper with its label follows the attribute. Keyed on the
+       attribute, not on a media query of its own, so the kit flips both in one
+       tick and can move focus across. #huc-group is [hidden] outright in the
+       gridded view. */
+    .seg-group:has(> .seg-btns[hidden]),
+    .select-group:has(> select[hidden]) { display: none; }
+
+    .info-icon { display: inline-flex; align-items: center; vertical-align: middle; margin: 0 3px 1px 0; opacity: 0.8; }
     .info-icon svg { stroke: currentColor; }
-    /* ── Map ───────────────────────────────────────────────────────────────── */
-    #main { flex: 1; min-height: 0; position: relative; }
 
-    #map { width: 100%; height: 100%; }
-
-    /* Category name carries the meaning that survives greyscale/CVD; the
-       percentile range is secondary. Stacked so a long category name doesn't
-       force the panel wide (HOUSE-STYLE §6). */
-    .legend-lbl { display: flex; flex-direction: column; line-height: 1.25; }
-    .legend-cat { font-size: 0.7rem; color: var(--text-secondary); white-space: nowrap; }
-    .legend-range { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); }
-
-    /* ── Legend ────────────────────────────────────────────────────────────── */
-    #legend {
-      position: absolute; bottom: max(36px, calc(12px + env(safe-area-inset-bottom))); left: 12px; z-index: 10;
-      background: var(--glass);
-      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      border: 1px solid var(--border-glass);
-      border-radius: var(--radius-md);
-      padding: 8px 10px 6px;
-      box-shadow: var(--shadow);
-      min-width: 120px;
-      pointer-events: none;
-    }
-
-    .legend-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 2px; }
-    #legend h4 { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin: 0; }
-    #legend-info-btn {
-      pointer-events: auto;
-      background: none; border: 1px solid var(--border-glass);
-      border-radius: 50%; width: 24px; height: 24px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; color: var(--text-dim);
-      font-size: 0.6rem; font-weight: 700; flex-shrink: 0;
-      transition: color var(--transition), border-color var(--transition);
-    }
-    #legend-info-btn:hover { color: var(--accent-light); border-color: var(--accent-light); }
-
-    #legend-toggle-btn {
-      pointer-events: auto;
-      background: none; border: none; padding: 0; flex-shrink: 0;
-      width: 24px; height: 24px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; color: var(--text-dim);
-      transition: color var(--transition), transform var(--transition);
-    }
-    #legend-toggle-btn:hover { color: var(--accent-light); }
-    #legend.collapsed #legend-toggle-btn { transform: rotate(180deg); }
-
-    #legend-body {
-      overflow: hidden;
-      max-height: 500px; opacity: 1;
-      transition: max-height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease;
-    }
-    #legend.collapsed #legend-body { max-height: 0; opacity: 0; }
-
-    .legend-sub { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; }
+    /* ── Legend (kit .mco-panel; app-owned position and rows) ─────────────── */
+    #legend { bottom: max(36px, calc(12px + env(safe-area-inset-bottom))); left: 12px; min-width: 150px; }
+    /* A portrait phone wraps MapLibre's attribution to two lines; clear it. */
+    @media (max-width: 640px) { #legend { bottom: max(64px, calc(12px + env(safe-area-inset-bottom))); } }
+    .legend-sub { font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 2px; }
     #legend-meta {
       font-family: var(--font-mono);
-      font-size: 0.65rem; color: var(--text-dim);
+      font-size: 0.65rem; color: var(--text-secondary);
       line-height: 1.5; margin-bottom: 8px;
     }
-    .legend-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
-    .legend-swatch { width: 16px; height: 14px; border-radius: 3px; flex-shrink: 0; }
-    .legend-lbl { font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; }
+    #legend-meta span { display: block; }
+    /* Static rows, not .mco-legend-row: that class is a toggle button, and
+       these categories can't be switched off. The swatch is the kit's, so it
+       keeps its --border edge and the white "Near normal" bin stays visible on
+       light glass (HOUSE-STYLE §6). Category name first: it is the part that
+       survives greyscale and CVD; the percentile range qualifies it. */
+    .legend-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 3px; }
+    .legend-lbl { display: flex; flex-direction: column; line-height: 1.25; }
+    .legend-cat { font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; }
+    /* --text-secondary, not --text-muted: the panel is glass over an arbitrary
+       basemap, where --text-muted's surface-only guarantee doesn't hold. */
+    .legend-range { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-secondary); }
+    /* kit-override: the panel head spaces title and toggle apart; the
+       provenance button joins the toggle on the right. */
+    .mco-panel-head .nav-btn.icon-only { margin-left: auto; }
 
-    /* ── Provenance modal ───────────────────────────────────────────────────── */
+    /* ── Provenance dialog ─────────────────────────────────────────────────── */
     .provenance-dates {
-      display: flex; flex-wrap: wrap; gap: 3px 14px;
+      display: flex; flex-wrap: wrap; gap: 3px 14px; list-style: none; padding: 0;
       font-family: var(--font-mono);
       font-size: 0.68rem; color: var(--text-secondary);
       margin-top: 0.4rem;
     }
 
-    /* WCAG 2.5.5 — comfortable touch targets on touch-only devices. The kit
-       already sizes .nav-btn, .seg-btn, .mco-btn-info and .mco-panel-toggle;
-       these are this app's own controls. */
+    /* ── Responsive ────────────────────────────────────────────────────────── */
+    /* Breakpoints 1400 (labels, segmented → select) / 1060 (chrome) / 750
+       (brand lockup) are the kit's ladder. With the zonal view's three groups
+       (view, HUC level, normals) the one-row bar needs ~1150px even with the
+       labels shed, so below 1060 the bar may wrap: the controls get their own
+       full-width row and the buttons lift up beside the brand (the photo
+       explorer's pattern). CSS `order` moves the visual position only; tab
+       order is intact. */
+    /* kit-override: one row above 1060. */
+    @media (min-width: 1061px) { .controls { flex-wrap: nowrap; } }
+    @media (max-width: 1060px) {
+      /* kit-override: the wrapped bar's row order. */
+      .nav-meta { order: 1; }
+      .controls { order: 2; flex-basis: 100%; flex-wrap: wrap; }
+    }
+
+    /* ── Landscape rail (kit .mco-navbar[data-rail] + MCO.initNavRail) ──────
+       The kit owns the rail column, the drawer and the un-hiding of labels
+       inside it. What stays here is this app's own content: the date
+       readout, and how its control groups stack in the drawer. Same query as
+       MCO.viewport.RAIL_MQ. */
+    @media (max-height: 560px) and (orientation: landscape) {
+      .rail-readout {
+        margin: 0; text-align: center; line-height: 1.25;
+        font-size: 0.66rem; font-weight: 500; color: var(--text-secondary);
+        white-space: nowrap;
+      }
+      .rail-readout span { display: block; }
+      /* kit-override: undo the ≤1060 bar's row ordering — in the drawer's
+         column the controls come first and flex-basis:100% would mean full
+         height. */
+      .mco-nav-drawer .controls { order: 0; flex-basis: auto; gap: 0.75rem; }
+      /* kit-override: the drawer stacks each label over its control. */
+      .mco-nav-drawer .control-group { flex-direction: column; align-items: stretch; gap: 0.25rem; }
+      .mco-nav-drawer .date-stepper input[type="date"] { flex: 1; min-width: 0; }
+      /* kit-override: the drawer's steppers sit side by side. */
+      .mco-nav-drawer .date-step-btns { flex-direction: row; gap: 4px; }
+      .mco-nav-drawer select.nav-select { width: 100%; }
+      /* kit-override: the drawer's buttons in a two-column grid. */
+      .mco-nav-drawer .nav-meta {
+        order: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
+      }
+    }
+
+    /* WCAG 2.5.5 — touch targets for app-owned controls (kit covers its own). */
     @media (hover: none) {
-      #legend-info-btn { min-width: 40px; min-height: 40px; }
-      /* Found by the kit 0.9.0 harness's 390px touch-target gate. The ID rule
-         above (24px) outbids the kit's .mco-panel-toggle 40px; #btn-info is a
-         plain .nav-btn (32px wide); and the date input stayed ~21px tall.
-         `height`, not min-height: WebKit ignores min-height on native form
-         controls (MIGRATING § Gotchas). */
-      #legend-toggle-btn { width: 40px; height: 40px; }
-      #btn-info { min-width: 40px; }
-      #date-input { height: 40px; }
+      /* `height`, not `min-height`: WebKit ignores min-height on native form
+         controls (kit MIGRATING.md § Gotchas). */
+      input[type="date"], select.nav-select { height: 40px; line-height: 40px; }
       .legend-row { min-height: 32px; }
-      /* WCAG 2.5.5 — two stacked 15px buttons are untappable. Lay the stepper
-         out as a pair of 40px targets side by side instead, exactly as
-         mesonet-photos did when its migration hit the same rule. */
+      /* Two stacked 15px buttons are untappable — lay the stepper out as a
+         pair of 40px targets (previous left, next right) instead. */
       .date-step-btns { flex-direction: row; gap: 4px; }
+      /* kit-override: 40px targets in place of the 15px bar steppers. */
       .nav-btn.date-step {
         min-width: 40px; min-height: 40px; height: 40px;
         border-radius: var(--radius-md);
       }
     }
-
-    /* ── Responsive ────────────────────────────────────────────────────────── */
-    /* Step 1 — hide text labels */
-    @media (max-width: 1400px) { .control-label { display: none; } .btn-label { display: none; } }
-    /* Step 2 — collapse the brand to the badge, tighten gaps.
-       kit-override: the kit collapses the lockup at 750px; this bar sheds it
-       at 1060px, because in the zonal view (four HUC buttons) the one-row bar
-       needs ~1000px with the lockup and the info button clips off the right
-       edge from 1000px down to 751px (measured, Chromium and WebKit). The
-       METHOD is now the kit's — visually hidden, so the title stays in the
-       accessibility tree — not the display:none this rule used to apply. */
-    @media (max-width: 1060px) {
-      /* kit-override: the kit's 750px brand collapse, applied at 1060px. */
-      :where(.mco-navbar) .brand {
-        position: absolute;
-        width: 1px; height: 1px;
-        padding: 0; margin: -1px;
-        overflow: hidden; clip: rect(0, 0, 0, 0);
-        white-space: nowrap; border: 0;
-      }
-      /* kit-override: the divider goes with the lockup, as at the kit's 750px. */
-      .mco-navbar > .nav-divider { display: none; }
-      #navbar { padding-left: 0.6rem; padding-right: 0.6rem; gap: 0.4rem; }
-      .nav-actions { gap: 0.2rem; }
-    }
-    /* Step 3 — allow wrapping below portrait-phone width */
-    @media (max-width: 640px)  { .nav-btn.date-step { height: 22px; } }
-    /* Rail drawer (kit 0.10.0; MCO.viewport.RAIL_MQ): the drawer has room, so
-       the control labels this bar sheds from 1400px down come back there. */
-    @media (max-height: 560px) and (orientation: landscape) {
-      /* kit-override: undoes this app's own ≤1400px display:none label shed. */
-      .mco-navbar[data-rail] .mco-nav-drawer .control-label { display: inline; }
-    }
-    /* Above 641px keep controls on one line */
-    @media (min-width: 641px)  { #navbar { flex-wrap: nowrap; } .controls { flex-wrap: nowrap; } }
   </style>
 </head>
 <body>
@@ -311,21 +295,36 @@
 <!-- WCAG 2.4.1 — first focusable element, jumps past the navbar to the map. -->
 <a class="mco-skip-link" href="#main">Skip to map</a>
 
-<!-- data-rail (kit 0.10.0): on a landscape phone the one-row bar can't hold
-     the zonal controls (the theme and info buttons sat off-screen at 750×342),
-     so it becomes a 56px left rail and .mco-nav-drawer holds the rest
-     (MCO.initNavRail). Outside rail mode the drawer is display:contents and
-     the bar lays out exactly as before. -->
+<!-- data-rail (kit 0.10.0): on a landscape phone the bar becomes a 56px left
+     rail and .mco-nav-drawer holds the rest (MCO.initNavRail). Outside rail
+     mode the drawer is display:contents and the bar lays out as usual. -->
 <header id="navbar" class="mco-navbar" data-rail>
   <a href="https://climate.umt.edu" target="_blank" rel="noopener noreferrer"
      class="logo-link" aria-label="Montana Climate Office">
     <img src="assets/mco-logo.png" alt="" class="logo-img" width="40" height="40">
   </a>
 
+  <!-- Landscape-phone rail (kit .mco-rail). display:none except at
+       MCO.viewport.RAIL_MQ, so it is out of the accessibility tree everywhere
+       else. Menu, then the hot control: next day above previous, like the
+       date stepper, with the date between them. -->
   <div class="mco-rail">
-    <button type="button" class="nav-btn icon-only" id="btn-rail-menu" aria-label="Menu"
+    <button type="button" class="nav-btn icon-only" id="btn-rail-menu" aria-label="Map controls"
             aria-controls="nav-drawer" aria-expanded="false">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-next" aria-label="Next day">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="18 15 12 9 6 15"/>
+      </svg>
+    </button>
+    <p class="rail-readout" id="rail-readout"></p>
+    <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-prev" aria-label="Previous day">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
     </button>
   </div>
 
@@ -341,46 +340,70 @@
     <div class="control-group">
       <label class="control-label" for="date-input">Date</label>
       <div class="date-stepper">
-        <input type="date" id="date-input" aria-label="Date">
+        <input type="date" id="date-input">
         <div class="date-step-btns">
-          <button type="button" class="nav-btn mco-step date-step" id="btn-date-next" aria-label="Next day">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="18 15 12 9 6 15"/>
-            </svg>
-          </button>
           <button type="button" class="nav-btn mco-step date-step" id="btn-date-prev" aria-label="Previous day">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="6 9 12 15 18 9"/>
             </svg>
           </button>
+          <button type="button" class="nav-btn mco-step date-step" id="btn-date-next" aria-label="Next day">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="18 15 12 9 6 15"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
 
-    <div class="control-group">
-      <span class="control-label">View</span>
-      <div class="seg-btns" role="group" aria-label="Map view">
-        <button class="nav-btn seg-btn" data-view="gridded" aria-pressed="true">Gridded</button>
-        <button class="nav-btn seg-btn" data-view="zonal"   aria-pressed="false">Zonal</button>
-      </div>
+    <!-- Single choices are radio fieldsets (one Tab stop, arrow keys —
+         HOUSE-STYLE §3). Each has a <select> twin that takes over at ≤1400px
+         (MCO.initSegmentedFallback). The visible label is aria-hidden on the
+         fieldset side because the legend already names the group. -->
+    <div class="control-group seg-group">
+      <span class="control-label" aria-hidden="true">View</span>
+      <fieldset class="seg-btns is-radio" id="view-btns">
+        <legend class="sr-only">Map view</legend>
+        <label class="nav-btn seg-btn"><input type="radio" name="view" value="gridded" checked>Gridded</label>
+        <label class="nav-btn seg-btn"><input type="radio" name="view" value="zonal">Zonal</label>
+      </fieldset>
+    </div>
+    <div class="control-group select-group">
+      <label class="control-label" for="view-select">View</label>
+      <select class="nav-select" id="view-select" hidden>
+        <option value="gridded">Gridded</option>
+        <option value="zonal">Zonal</option>
+      </select>
     </div>
 
-    <div class="control-group" id="huc-level-group" style="display:none">
-      <span class="control-label">Level</span>
-      <div class="seg-btns" role="group" aria-label="HUC level">
-        <button class="nav-btn seg-btn" data-huc="2" aria-pressed="true">HUC2</button>
-        <button class="nav-btn seg-btn" data-huc="4" aria-pressed="false">HUC4</button>
-        <button class="nav-btn seg-btn" data-huc="6" aria-pressed="false">HUC6</button>
-        <button class="nav-btn seg-btn" data-huc="8" aria-pressed="false">HUC8</button>
+    <div id="huc-group" class="control-group" hidden>
+      <div class="control-group seg-group">
+        <span class="control-label" aria-hidden="true">Level</span>
+        <fieldset class="seg-btns is-radio" id="huc-btns">
+          <legend class="sr-only">Watershed level</legend>
+          <label class="nav-btn seg-btn"><input type="radio" name="huc" value="2" checked>HUC2</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="huc" value="4">HUC4</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="huc" value="6">HUC6</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="huc" value="8">HUC8</label>
+        </fieldset>
+      </div>
+      <div class="control-group select-group">
+        <label class="control-label" for="huc-select">Level</label>
+        <select class="nav-select" id="huc-select" aria-label="Watershed level" hidden>
+          <option value="2">HUC2</option>
+          <option value="4">HUC4</option>
+          <option value="6">HUC6</option>
+          <option value="8">HUC8</option>
+        </select>
       </div>
     </div>
   </div>
 
-  <div class="nav-actions">
-    <button class="nav-btn icon-only" id="btn-share" title="Copy shareable link" aria-label="Copy shareable link">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
+  <div class="nav-meta">
+    <button type="button" class="nav-btn" id="btn-share" aria-label="Copy shareable link">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
         <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
@@ -389,8 +412,8 @@
       <span class="btn-label">Share</span>
     </button>
 
-    <button class="nav-btn icon-only" id="btn-export" title="Export map as PNG" aria-label="Export map as PNG">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
+    <button type="button" class="nav-btn" id="btn-export" aria-label="Export map as PNG">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
         <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -398,7 +421,8 @@
       <span class="btn-label">Export</span>
     </button>
 
-    <button class="nav-btn icon-only" id="btn-theme" title="Toggle theme" aria-label="Toggle theme">
+    <!-- aria-label maintained at runtime by MCO.initThemeToggle -->
+    <button type="button" class="nav-btn icon-only" id="btn-theme" title="Switch theme" aria-label="Switch theme">
       <svg id="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
@@ -413,25 +437,35 @@
         <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
         <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
       </svg>
+      <!-- High contrast is the third theme in the cycle (kit 0.10.0). -->
       <svg id="icon-contrast" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
            aria-hidden="true" style="display:none"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
     </button>
 
-    <button class="nav-btn" id="btn-info" aria-label="About this map">?</button>
+    <button type="button" class="nav-btn mco-btn-info" id="btn-info" aria-label="About this explorer">?</button>
   </div>
   </div>
 </header>
-<div class="mco-scrim" id="rail-scrim" aria-hidden="true" hidden></div>
+
+<!-- Rail mode only: dims the map while the drawer is open; a tap closes it. -->
+<div class="mco-scrim" id="rail-scrim" hidden></div>
 
 <main id="main" tabindex="-1">
-  <div id="map" role="application" aria-label="SWE Percentile Map"></div>
+  <!-- The sr-only table twin (MCO.srTable, from app.js) is appended to <main>
+       after the map. -->
+  <div id="map" role="application" aria-label="SWE percentile map"></div>
 
   <aside id="legend" class="mco-panel" aria-labelledby="legend-title">
-    <div class="legend-header mco-panel-head">
-      <h2 id="legend-title" class="mco-panel-title">SWE Percentile</h2>
-      <button type="button" id="legend-info-btn" aria-label="Data provenance">i</button>
-      <button type="button" id="legend-toggle-btn" class="mco-panel-toggle"
-              aria-controls="legend-body" aria-label="Collapse legend" aria-expanded="true">
+    <div class="mco-panel-head">
+      <h2 id="legend-title" class="mco-panel-title">SWE percentile</h2>
+      <button type="button" class="nav-btn icon-only" id="legend-info-btn" aria-label="About this data">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5v.01"/>
+        </svg>
+      </button>
+      <button type="button" class="mco-panel-toggle" id="legend-toggle"
+              aria-controls="legend-body" aria-label="Legend" aria-expanded="true">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
              stroke="currentColor" aria-hidden="true">
@@ -448,20 +482,18 @@
 </main>
 
 <!-- Purely visual: anchored to the cursor, with no focusable trigger, so it is
-     never surfaced to assistive tech. role="tooltip" (pre-existing) actually
-     HURT — it promises an accessible name and a trigger relationship that do
-     not exist, and axe flags it. The AT path is MCO.announce, which the
-     click-to-pin readout writes to. Matches the other four consumers. -->
+     never surfaced to assistive tech. The AT path is MCO.announce, which the
+     click-to-pin reading writes to, and the table twin. -->
 <div id="tooltip" class="mco-tooltip" aria-hidden="true"></div>
 
 <dialog id="info-modal" class="mco-modal" aria-labelledby="info-modal-title">
   <div class="info-modal-box">
     <div class="info-modal-header">
       <div>
-        <div class="info-modal-title" id="info-modal-title">Snowpack Explorer</div>
-        <div class="info-modal-subtitle">Montana Climate Office</div>
+        <h2 class="info-modal-title" id="info-modal-title">Snowpack Explorer</h2>
+        <p class="info-modal-subtitle">A service of the Montana Climate Office</p>
       </div>
-      <button class="modal-close" id="btn-info-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
     </div>
 
     <div class="info-section">
@@ -479,7 +511,7 @@
             <a href="https://nsidc.org/data/g02158" target="_blank" rel="noopener">NOAA SNODAS</a>.</li>
         <li><strong>Zonal</strong> — area-weighted mean SWE percentiles aggregated to
             <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset" target="_blank" rel="noopener">USGS Watershed Boundary Dataset</a>
-            (WBD) units at HUC levels 2, 4, 6, and 8. Hover over a watershed for its name and percentile.</li>
+            (WBD) units at HUC levels 2, 4, 6, and 8. Hover over a watershed, or click or tap it, for its name and percentile.</li>
       </ul>
     </div>
 
@@ -487,7 +519,7 @@
       <h3>Percentile method</h3>
       <p>Percentiles are estimated with a <strong>zero-inflated gamma (ZIG)</strong> distribution fit
          by L-moments, which smooths sparse records and extrapolates beyond observed extremes.</p>
-      <p>Click the <strong>ⓘ</strong> button in the legend for reference dates and full provenance
+      <p>Press the <strong>About this data</strong> button in the legend for reference dates and full provenance
          details for the current date.</p>
     </div>
 
@@ -511,9 +543,10 @@
 
     <div class="info-section">
       <h3>Data &amp; processing</h3>
-      <p>SNODAS daily SWE grids are available from September 30, 2003 to present. Percentiles and watershed
+      <p>SNODAS daily SWE grids are available from January 1, 2004 to present. Percentiles and watershed
          aggregations are processed and hosted by the
          <a href="https://climate.umt.edu" target="_blank" rel="noopener">Montana Climate Office</a>.</p>
+      <p id="info-credit"></p>
     </div>
   </div>
 </dialog>
@@ -522,23 +555,23 @@
   <div class="info-modal-box">
     <div class="info-modal-header">
       <div>
-        <div class="info-modal-title" id="provenance-modal-title">Data Provenance</div>
-        <div class="info-modal-subtitle" id="provenance-modal-subtitle"></div>
+        <h2 class="info-modal-title" id="provenance-modal-title">About this data</h2>
+        <p class="info-modal-subtitle" id="provenance-modal-subtitle"></p>
       </div>
-      <button class="modal-close" id="btn-provenance-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
     </div>
     <div id="provenance-content"></div>
   </div>
 </dialog>
 
 <!-- Vendor libraries, all version-pinned and SRI-guarded. MapLibre is not
-     among them any more: 6.x has no UMD build, so mco-map.js imports it on
-     demand (MCO.map.loadMapLibre, awaited at the top of app.js) under the
-     import map's hashes in <head>. flatgeobuf was once on a FLOATING major
-     (@3): an integrity hash against a floating version hard-fails the moment
-     the CDN moves, so it is pinned to 3.38.0, as mesonet-explorer is. fzstd
-     stays a global: the kit's cog-protocol.js decodes ZSTD COG tiles with it.
-     The Parquet reader (hyparquet, carrying its own fzstd) is vendored in
+     among them: 6.x has no UMD build, so mco-map.js imports it on demand
+     (MCO.map.loadMapLibre, awaited at the top of app.js) under the import
+     map's hashes in <head>. flatgeobuf was once on a FLOATING major (@3): an
+     integrity hash against a floating version hard-fails the moment the CDN
+     moves, so it is pinned to 3.38.0, as mesonet-explorer is. fzstd stays a
+     global: the kit's cog-protocol.js decodes ZSTD COG tiles with it. The
+     Parquet reader (hyparquet, carrying its own fzstd) is vendored in
      vendor/ and imported on demand by app.js. -->
 <script src="https://cdn.jsdelivr.net/npm/fzstd@0.1.1/umd/index.js"
         integrity="sha384-j11FJIL1HatEZOwEloCeZcNzDESMGs1ncTc2Kt0LgG0QpBU7lZHgyGU0Mif1OHeH"

@@ -67,14 +67,41 @@
   // Step thresholds + colors for HUC fill expressions (mirrors the COG colormap)
   const HUC_COLOR_STOPS = BREAKS.slice(1).flatMap((b, i) => [b, `rgb(${COLORS[i + 1]})`]);
 
+  // The normals flavor every percentile is read against. One for now; the
+  // path segment is already a parameter of every URL builder below.
+  const FLAVOR       = 'zig';
+  const FLAVOR_LABEL = 'ZIG';
+
+  const VIEWS      = ['gridded', 'zonal'];
+  const HUC_LEVELS = [2, 4, 6, 8];
+  const LS_INFO_SEEN     = 'mco-snowpack-info-seen';
+  const LS_INFO_SEEN_OLD = 'mco-snodas-info-seen';   // pre-0.18 key, still honoured
+  const LS_LEGEND        = 'mco-snowpack-legend';
+
+  const mainEl = document.getElementById('main');
+
+  // The pipeline's pointer to the newest published date. Fetched first, in
+  // parallel with MapLibre, so the page opens on a day that exists instead of
+  // probing today's (usually unpublished) file. Null when it can't be read;
+  // the date probe below still works without it.
+  const LATEST_URL = `${DATA_HOST}/snodas/latest/manifest.json`;
+  const _latestP = MCO.fetchJSON(LATEST_URL, { cache: 'no-cache' })
+    .then(m => (/^\d{4}-\d{2}-\d{2}$/.test(m && m.date) ? m.date : null))
+    .catch(() => null);
+
   // ── MapLibre 6 ───────────────────────────────────────────────────────────
-  // Awaited before anything else, as the UMD <script> it replaces was: the UI
-  // wiring below closes over `map`, so it must not run ahead of the library.
+  // Awaited before anything else: the UI wiring below closes over `map`, so
+  // it must not run ahead of the library. A failed import (offline, CDN down,
+  // an SRI mismatch) says so over the map rather than leaving an empty pane.
   try {
     await MCO.map.loadMapLibre();
   } catch (err) {
     console.error('[maplibre]', err);
-    MCO.notice({ tone: 'danger', text: 'The map library failed to load. Reload the page to try again.' });
+    MCO.notice({
+      tone: 'danger', text: 'The map library failed to load.',
+      action: { label: 'Reload', onClick: () => location.reload() },
+      container: mainEl, place: 'over',
+    });
     MCO.ready();
     return;
   }
@@ -86,49 +113,54 @@
   CogProtocol.initCogProtocol(maplibregl);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  function todayMT() {
-    return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
-  }
-
-  function formatDate(isoStr) {
-    return new Date(`${isoStr}T12:00:00`).toLocaleDateString('en-US', {
-      month: 'long', day: 'numeric', year: 'numeric',
-    });
-  }
-
   function ordinal(n) {
     const s = [,'st','nd','rd'][n % 100 >> 3 ^ 1 && n % 10] || 'th';
     return `${n}${s}`;
   }
 
-  // ── URL / state ───────────────────────────────────────────────────────────
-  const urlParams = new URLSearchParams(location.search);
-  // ZIG is the only percentile method. The ECDF option was retired; an old
-  // ?method= link is ignored and the parameter is stripped from the URL.
-  const METHOD       = 'zig';
-  const METHOD_LABEL = 'ZIG';
-  if (urlParams.has('method')) {
-    const p = new URLSearchParams(location.search);
-    p.delete('method');
-    history.replaceState(null, '', `?${p}`);
+  // Build an element with DOM calls only (HOUSE-STYLE §7): text children are
+  // set as text, never parsed as HTML.
+  function h(tag, props, ...children) {
+    const el = document.createElement(tag);
+    if (props) Object.assign(el, props);
+    for (const c of children) if (c != null) el.append(c);
+    return el;
   }
-  let currentDate     = urlParams.get('date') || todayMT();
-  let currentView     = ['gridded','zonal'].includes(urlParams.get('view')) ? urlParams.get('view') : 'gridded';
-  let currentHucLevel = (() => { const v = parseInt(urlParams.get('huc')); return [2,4,6,8].includes(v) ? v : 2; })();
+
+  const isIsoDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '') && !isNaN(new Date(`${s}T12:00:00`));
+
+  // ── URL / state ───────────────────────────────────────────────────────────
+  // URL is the primary state (HOUSE-STYLE §4): read once here, every value
+  // checked against what it may be. A stale ?method= from before the flavor
+  // was fixed is ignored, and the first URL write drops it.
+  const urlParams = MCO.urlParams();
+  const getLower  = (k) => MCO.getParamLower(k, urlParams);
+
+  // The newest date there is data for: the manifest's, or today (Mountain
+  // time) when the manifest can't be read.
+  let latestDate = (await _latestP) || MCO.todayMT();
+  const askedDate = isIsoDate(urlParams.get('date')) ? urlParams.get('date') : null;
+  let currentDate     = askedDate || latestDate;
+  let currentView     = VIEWS.includes(getLower('view')) ? getLower('view') : 'gridded';
+  let currentHucLevel = (() => { const v = parseInt(urlParams.get('huc'), 10); return HUC_LEVELS.includes(v) ? v : 2; })();
   if (currentDate < SNODAS_START) currentDate = SNODAS_START;
-  if (currentDate > todayMT())    currentDate = todayMT();
+  if (currentDate > latestDate)   currentDate = latestDate;
 
-  // Initial map position from URL (lat/lng/zoom), if present
-  const _initLat  = parseFloat(urlParams.get('lat'));
-  const _initLng  = parseFloat(urlParams.get('lng'));
-  const _initZoom = parseFloat(urlParams.get('zoom'));
-  const _hasInitPos = !isNaN(_initLat) && !isNaN(_initLng) && !isNaN(_initZoom);
+  // Headless export (HOUSE-STYLE §4 ?export= convention): ?export=light|dark
+  // forces the theme before the map is built, set directly rather than with
+  // MCO.setTheme so a scripted run never persists a theme. ?export=true, the
+  // old spelling, exports in whatever theme the page booted with.
+  const _exportParam = getLower('export');
+  const exportOnLoad = ['light', 'dark', 'true'].includes(_exportParam);
+  if (_exportParam === 'light' || _exportParam === 'dark') {
+    document.documentElement.dataset.theme = _exportParam;
+  }
 
-  // URL builders (defined after state so default args are readable)
-  const cogUrl        = (d, m = METHOD) => `${S3_ROOT}/${m}/${d}/${d}_${m}_swe_ptile.tif`;
+  // URL builders
+  const cogUrl        = (d, m = FLAVOR) => `${S3_ROOT}/${m}/${d}/${d}_${m}_swe_ptile.tif`;
   const fgbUrl        = lvl   => `${FGB_ROOT}/huc${lvl}.fgb`;
-  const zonalUrl      = (d, m) => `${ZONAL_ROOT}/${m}/${d}/${d}_${m}_swe_normals.parquet`;
-  const provenanceUrl = (d, m) => `${S3_ROOT}/${m}/${d}/${d}_${m}_provenance.json`;
+  const zonalUrl      = (d, m = FLAVOR) => `${ZONAL_ROOT}/${m}/${d}/${d}_${m}_swe_normals.parquet`;
+  const provenanceUrl = (d, m = FLAVOR) => `${S3_ROOT}/${m}/${d}/${d}_${m}_provenance.json`;
 
   async function cogExists(d) {
     try {
@@ -141,39 +173,61 @@
   }
 
   // Walk backwards from the given date to find the most recent date with data.
-  // Returns the original date if it has data, otherwise tries up to `maxDays` prior dates.
+  // Returns the original date if it has data, otherwise tries up to `maxDays`
+  // prior dates. MCO.shiftDate, not a Date round-trip through toISOString():
+  // that re-projects to UTC and lands a day early for viewers east of it.
   async function findLatestAvailable(startDate, maxDays = 30) {
-    const d = new Date(startDate + 'T00:00:00');
+    let d = startDate;
     for (let i = 0; i < maxDays; i++) {
-      const iso = d.toISOString().slice(0, 10);
-      if (iso < SNODAS_START) break;
-      if (await cogExists(iso)) return iso;
-      d.setDate(d.getDate() - 1);
+      if (d < SNODAS_START) break;
+      if (await cogExists(d)) return d;
+      d = MCO.shiftDate(d, -1);
     }
     return null;
   }
 
-  function pushState() {
-    const params = { date: currentDate, view: currentView };
-    if (currentView === 'zonal') params.huc = currentHucLevel;
-    try {
-      const { lng, lat } = map.getCenter();
-      params.lng  = lng.toFixed(4);
-      params.lat  = lat.toFixed(4);
-      params.zoom = map.getZoom().toFixed(2);
-    } catch {}  // map not yet initialized on first call
-    history.replaceState(null, '', `?${new URLSearchParams(params)}`);
-    setTitle();
+  let map = null;
+  let _mapReady = false;
+
+  // Mirror state into the query string (HOUSE-STYLE §4). The date is always
+  // written: its default is "the latest available", so a link without it
+  // would show a different day tomorrow. Everything else is elided at its
+  // default — the gridded view, the default extent (cameraParamsIfDefault),
+  // and the theme a visitor with no choice would get (MCO.osTheme()).
+  function writeUrl({ push = false, state } = {}) {
+    const params = { date: currentDate };
+    if (currentView === 'zonal') { params.view = 'zonal'; params.huc = currentHucLevel; }
+    const theme = MCO.getTheme();
+    if (theme !== MCO.osTheme()) params.theme = theme;
+    if (_mapReady) Object.assign(params, MCO.map.cameraParamsIfDefault(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS }));
+    if (push) MCO.pushUrlState(params, { state });
+    else MCO.replaceUrlState(params);
+    updateMeta();
+    updateRail();
   }
 
-  // HOUSE-STYLE §1 / CONSUMERS.md page titles: "<detail> · Snowpack · MCO",
-  // detail first (a tab truncates) and the SHORT family. This used to write
-  // "Snowpack Explorer · <date> · Montana Climate Office" — the wrong short
-  // name, the long family and the detail in the middle.
-  function setTitle() {
-    MCO.setPageTitle({ short: 'Snowpack', family: 'MCO', detail: currentDate });
+  // HOUSE-STYLE §1 page titles and link cards through the kit: the tab is
+  // "<date> · Snowpack · MCO" (detail first — a tab truncates — and the SHORT
+  // family); the card is the same with the long family. og:url follows the
+  // shared state; the canonical link stays the static one in index.html.
+  function updateMeta() {
+    const dateFmt = MCO.formatDateStr(currentDate);
+    const where = currentView === 'zonal' ? `HUC${currentHucLevel} watersheds` : 'the contiguous United States';
+    const desc = `Snow water equivalent percentiles for ${where} on ${dateFmt}, from NOAA SNODAS. `
+               + 'A service of the Montana Climate Office.';
+    MCO.setPageTitle({ short: 'Snowpack', family: 'MCO', detail: dateFmt });
+    MCO.setSocialMeta({ short: 'Snowpack', family: 'MCO', detail: dateFmt, description: desc, url: location.href });
+    document.querySelector('meta[name="description"]')?.setAttribute('content', desc);
   }
-  setTitle();
+
+  // The date at a glance in the landscape rail, where the drawer is usually
+  // closed. Spans built with textContent.
+  const railReadout = document.getElementById('rail-readout');
+  function updateRail() {
+    const d = new Date(`${currentDate}T12:00:00`);
+    const md = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    railReadout.replaceChildren(...[md, String(d.getFullYear())].map(t => h('span', { textContent: t })));
+  }
 
   // ── Announcements ─────────────────────────────────────────────────────────
   // MCO.showToast owns the transient toast (and creates its own element).
@@ -181,10 +235,9 @@
 
   // A pinned reading is an answer to a question — and the only route a
   // screen-reader user has to a gridded raster value at all — so it goes
-  // through the page's one announcer, MCO.announce (kit 0.8.0). The toast that
-  // shows the same text is kept out of the accessibility tree for it
-  // ({announce: false}), or a screen reader heard every reading twice: once
-  // from the toast's role=status and once from the old #sr-announce region.
+  // through the page's one announcer, MCO.announce. The toast that shows the
+  // same text is kept out of the accessibility tree for it ({announce:
+  // false}), or a screen reader would hear every reading twice.
   const pinReading = (msg) => {
     showToast(msg, undefined, { announce: false });
     MCO.announce(msg);
@@ -192,123 +245,111 @@
 
   // ── Theme ─────────────────────────────────────────────────────────────────
   // MCO.initThemeToggle owns the icon swap, the aria-label, and persistence to
-  // the shared mco-theme key.
+  // the shared mco-theme key. The toggle only mirrors the theme into the URL;
+  // the map restyles from the kit's mco:themechange event, which every theme
+  // source fires. The style.load listener below re-adds the data layers.
   MCO.initThemeToggle({
     button:   document.getElementById('btn-theme'),
     iconSun:  document.getElementById('icon-sun'),
     iconMoon: document.getElementById('icon-moon'),
-    // 3-state (kit 0.10.0): dark → light → high contrast, so high contrast is
-    // reachable from the page, not only via ?theme= or storage. The icon and
+    // 3-state (kit 0.10.0): dark → light → high contrast. The icon and
     // aria-label name the theme a press switches TO.
     cycle: true,
     iconContrast: document.getElementById('icon-contrast'),
+    onChange: () => writeUrl(),
   });
-  // Any theme flip — this button or anything else calling MCO.setTheme —
-  // restyles the basemap (kit 0.9.0 event; was the toggle's onChange, which
-  // only saw this one button). The style.load listener below re-adds the
-  // data layers, so the listener only swaps the style. MapLibre has been
-  // awaited above, and the map exists before any user can flip the theme.
-  document.addEventListener('mco:themechange', () => map.setStyle(MCO.map.cartoStyleUrl()));
+  document.addEventListener('mco:themechange', () => { if (map) map.setStyle(MCO.map.cartoStyleUrl()); });
 
   // ── Legend ────────────────────────────────────────────────────────────────
+  // Static rows: the kit swatch (with its --border edge, so the white
+  // near-normal bin can't vanish) beside "D4 — Exceptional drought · < 2",
+  // category first because that is the part that survives greyscale and CVD.
   const legendRowsEl = document.getElementById('legend-rows');
   for (let i = 0; i < BREAKS.length; i++) {
     const lo  = BREAKS[i];
     const hi  = i + 1 < BREAKS.length ? BREAKS[i + 1] : null;
     const lbl = lo === 0 ? `< ${hi}` : hi === null ? `≥ ${lo}` : `${lo}–${hi}`;
-    const row    = document.createElement('div');
-    row.className = 'legend-row';
-    const swatch = document.createElement('div');
-    swatch.className = 'legend-swatch';
-    const [r, g, b] = COLORS[i];
-    swatch.style.background = `rgb(${r},${g},${b})`;
-    const label = document.createElement('div');
-    label.className = 'legend-lbl';
-    // "D4 — Exceptional drought · < 2" — category first, because that is the
-    // part that survives greyscale and CVD; the percentile range qualifies it.
-    label.innerHTML = `<span class="legend-cat">${MCO.escapeHTML(CATEGORIES[i])}</span>`
-                    + `<span class="legend-range">${MCO.escapeHTML(lbl)}</span>`;
-    row.appendChild(swatch);
-    row.appendChild(label);
-    legendRowsEl.appendChild(row);
+    const swatch = h('span', { className: 'mco-legend-swatch' });
+    swatch.setAttribute('aria-hidden', 'true');
+    swatch.style.setProperty('--swatch', `rgb(${COLORS[i]})`);
+    legendRowsEl.append(h('div', { className: 'legend-row' },
+      swatch,
+      h('span', { className: 'legend-lbl' },
+        h('span', { className: 'legend-cat', textContent: CATEGORIES[i] }),
+        h('span', { className: 'legend-range', textContent: lbl }))));
   }
 
-  // ── Legend toggle ─────────────────────────────────────────────────────────
-  const legendEl     = document.getElementById('legend');
-  const legendToggle = document.getElementById('legend-toggle-btn');
-
-  function setLegendCollapsed(collapsed) {
-    legendEl.classList.toggle('collapsed', collapsed);
-    legendToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-    legendToggle.setAttribute('aria-label',    collapsed ? 'Expand legend' : 'Collapse legend');
-  }
-
-  if (window.innerWidth <= 640) setLegendCollapsed(true);
-  legendToggle.addEventListener('click', () =>
-    setLegendCollapsed(!legendEl.classList.contains('collapsed')));
+  // The kit's collapsible panel: aria-expanded on the toggle, [hidden] on the
+  // body after the slide, the choice remembered, and collapsed by default on
+  // a compact screen (short landscape phones included) until the visitor
+  // says otherwise.
+  MCO.initCollapsible({
+    toggle: document.getElementById('legend-toggle'),
+    body:   document.getElementById('legend-body'),
+    storageKey: LS_LEGEND,
+    autoCollapseOnCompact: true,
+  });
 
   // ── Provenance ────────────────────────────────────────────────────────────
-  const _provenanceCache = new Map(); // `${date}_${method}` → provenance object
+  // Cached per date and flavor; a failed fetch is evicted, so a later open
+  // tries again, and resolves to null for the callers.
+  const _cache = MCO.promiseCache();
+  function fetchProvenance(d, m = FLAVOR) {
+    return _cache.cached(`prov:${d}_${m}`, () => MCO.fetchJSON(provenanceUrl(d, m))).catch(() => null);
+  }
 
-  async function fetchProvenance(d, m) {
-    const key = `${d}_${m}`;
-    if (_provenanceCache.has(key)) return _provenanceCache.get(key);
-    try {
-      const res = await fetch(provenanceUrl(d, m));
-      if (!res.ok) return null;
-      const prov = await res.json();
-      _provenanceCache.set(key, prov);
-      return prov;
-    } catch { return null; }
+  function refRange(prov) {
+    const years = prov.reference_dates.map(d => d.slice(0, 4));
+    return `${years[0]}–${years[years.length - 1]}`;
   }
 
   function updateLegendMeta(prov) {
-    document.getElementById('legend-sub').textContent =
-      METHOD_LABEL;
+    document.getElementById('legend-sub').textContent = FLAVOR_LABEL;
     const el = document.getElementById('legend-meta');
     if (!prov) { el.textContent = ''; return; }
-    const years    = prov.reference_dates.map(d => d.slice(0, 4));
-    const refRange = `${years[0]}\u2013${years[years.length - 1]}`;
-    el.innerHTML   = `${formatDate(prov.normals_date)}<br>${refRange}`;
+    el.replaceChildren(
+      h('span', { textContent: MCO.formatDateStr(prov.normals_date) }),
+      h('span', { textContent: refRange(prov) }));
   }
 
-  fetchProvenance(currentDate, METHOD).then(updateLegendMeta);
+  fetchProvenance(currentDate).then(updateLegendMeta);
 
   // ── Map ───────────────────────────────────────────────────────────────────
-  // No API keys here any more. The basemap moved from Stadia to the kit's
-  // keyless CARTO and the hillshade from MapTiler terrain-rgb to the kit's
-  // keyless AWS terrarium DEM, which retired both credentials this static site
-  // used to ship to every visitor. The old keys are still in git history and
-  // should be revoked at the vendors.
-  const COG_BOUNDS     = [[-124.733, 24.95], [-66.94, 52.875]];
-  const FIT_OPTS       = { padding: 20 };
-  let _fitZoom;
+  // No API keys here: the basemap is the kit's keyless CARTO and the
+  // hillshade the kit's keyless AWS terrarium DEM. The old Stadia and
+  // MapTiler keys are still in git history and should be revoked at the
+  // vendors.
+  const COG_BOUNDS = [[-124.733, 24.95], [-66.94, 52.875]];
+  const FIT_OPTS   = { padding: 20 };
 
+  // Check the starting date in parallel with the basemap style loading, and
+  // pre-fetch its COG metadata only once it is known to exist: today's file
+  // is usually not published yet, and preloading a 404 throws inside the
+  // kit's protocol (the CONSUMERS.md "errors on an unpublished day" item).
+  const _initDateOk = cogExists(currentDate);
+  _initDateOk.then(ok => { if (ok) CogProtocol.preload(cogUrl(currentDate)); });
 
-  // Pre-fetch COG metadata in parallel with the Stadia style loading
-  CogProtocol.preload(cogUrl(currentDate));
-
-  const map = new maplibregl.Map({
+  map = new maplibregl.Map({
     container: 'map',
     style: MCO.map.cartoStyleUrl(),
-    ...(_hasInitPos
-      ? { center: [_initLng, _initLat], zoom: _initZoom }
-      : { bounds: COG_BOUNDS, fitBoundsOptions: FIT_OPTS }),
+    ...MCO.map.initialCamera(urlParams, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS }),
     canvasContextAttributes: { preserveDrawingBuffer: true }, // required for PNG export (MapLibre ≥ 5 option; unchanged in 6)
   });
 
-  // House navigation (MCO.map.addNavigation): zoom buttons, top-right, no
-  // compass — rotation isn't a feature here, and a compass that never turns
-  // is one more tab stop and touch target of noise (settled precedent).
+  // House navigation: zoom buttons, top-right, no compass — rotation isn't a
+  // feature here — with the full-extent button fused into the same group, and
+  // the zoom floor that keeps the lower 48 filling the viewport.
   MCO.map.addNavigation(map);
+  MCO.map.addFitControl(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS, title: 'Zoom to the lower 48' });
+  const zoomFloor = MCO.map.installZoomFloor(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS });
   // …so rotation goes too, or a rotated map would have no way back north.
   map.dragRotate.disable();
   map.touchZoomRotate.disableRotation();
   map.keyboard.disableRotation();
 
-  // A dead basemap no longer leaves a blank page (kit 0.8.0): the style is
-  // retried, then replaced by the kit's blank style (which loads, so the data
-  // still draws) with a Retry notice.
+  // A dead basemap no longer leaves a blank page: the style is retried, then
+  // replaced by the kit's blank style (which loads, so the data still draws)
+  // with a Retry notice.
   MCO.map.watchBasemap(map);
 
   // Re-add the data layers on EVERY style.load — a theme switch, a basemap
@@ -327,12 +368,11 @@
   // Add custom sources and layers in the correct z-order.
   // Called on initial load and after each basemap style swap.
   function addCustomLayers() {
-    const before = map.getStyle().layers.find(l => l.type === 'symbol')?.id;
+    const before = MCO.map.firstSymbolLayerId(map);
 
-    // Hillshade — the kit's keyless AWS terrarium DEM with per-theme paints
-    // (including high-contrast, which this page previously had no values for).
+    // Hillshade — the kit's keyless AWS terrarium DEM with per-theme paints.
     // Keeps the layer id 'hillshade' so the huc-fill insertion anchor below
-    // still resolves, and the same beforeId so the stack order is unchanged.
+    // still resolves.
     MCO.map.addHillshade(map, { layerId: 'hillshade', beforeId: before });
 
     // HUC zonal layers
@@ -345,6 +385,9 @@
         id: 'huc-fill', type: 'fill', source: 'huc',
         layout: { visibility: 'none' },
         paint: {
+          // Data fill, not text: a watershed with no percentile is a mid grey
+          // at 10% opacity, a wash that reads as "nothing here" on either
+          // basemap; its name and "no data" reach AT through the table twin.
           'fill-color': ['case',
             ['==', ['feature-state', 'swe_ptile'], null], 'rgb(128,128,128)',
             ['step', ['feature-state', 'swe_ptile'], `rgb(${COLORS[0]})`, ...HUC_COLOR_STOPS],
@@ -357,6 +400,10 @@
       map.addLayer({
         id: 'huc-line', type: 'line', source: 'huc',
         layout: { visibility: 'none' },
+        // Boundary between data fills (contrast, WCAG 1.4.11): #333 measures
+        // 6.6–12.6:1 against the D2–W1 fills and the white near-normal bin,
+        // but only 1.0–2.6:1 against D4/D3 and W2–W4; there the fill change
+        // between neighbours carries the edge, and the twin carries the data.
         paint: { 'line-color': '#333', 'line-width': 0.7, 'line-opacity': 0.7 },
       }, before);
     }
@@ -384,22 +431,32 @@
     map.setLayoutProperty('huc-line', 'visibility', zonalVis);
   }
 
+  // The progress bar over the map for the slow steps: the date probe, the
+  // watershed boundaries and the zonal table. Never shown for a fast load.
+  const loading = MCO.loading(mainEl, { label: 'Loading snowpack data', place: 'over' });
+
   map.on('load', async () => {
-    _fitZoom = map.cameraForBounds(COG_BOUNDS, FIT_OPTS).zoom;
+    zoomFloor.refresh();
 
     // Validate initial date — today's data may not be processed yet.
-    if (!(await cogExists(currentDate))) {
-      const fallback = await findLatestAvailable(currentDate);
+    loading.start();
+    if (!(await _initDateOk)) {
+      const fallback = await findLatestAvailable(MCO.shiftDate(currentDate, -1));
       if (fallback) {
         currentDate = fallback;
         dateInput.value = currentDate;
-        showToast(`Showing latest available: ${currentDate}`);
+        if (!exportOnLoad) showToast(`Showing the latest available date, ${MCO.formatDateStr(currentDate)}.`, 5000);
+        fetchProvenance(currentDate).then(updateLegendMeta);
       } else {
-        showToast('No recent SNODAS data found');
+        MCO.notice({
+          tone: 'danger', text: 'No SNODAS data was found for the last 30 days.',
+          action: { label: 'Reload', onClick: () => location.reload() },
+          container: mainEl, place: 'over',
+        });
       }
-      pushState();
-      stepper.refresh();   // the fallback moved the date off its upper bound
+      refreshSteppers();   // the fallback moved the date off its upper bound
     }
+    loading.done();
 
     addCustomLayers();
     _layersAdded = true;
@@ -416,27 +473,19 @@
       ? setHucLayer()
       : new Promise(r => { map.triggerRepaint(); map.once('idle', r); });
 
-    // Push position/zoom to URL on every pan or zoom
-    map.on('moveend', pushState);
-
+    // Mirror the camera on every pan or zoom. The first write publishes the
+    // clean initial URL (and drops anything stale, like ?method=).
     _mapReady = true;
+    map.on('moveend', () => writeUrl());
+    writeUrl();
 
     // First meaningful state: the first data layer has drawn. Releases the
-    // kit's html.mco-booting first-paint hold (kit 0.9.0); the anti-flash
-    // snippet's 3 s timeout releases it anyway if this never resolves.
+    // kit's html.mco-booting first-paint hold; the anti-flash snippet's 3 s
+    // timeout releases it anyway if this never resolves.
     _initReady.then(() => MCO.ready(), () => MCO.ready());
 
     // URL-triggered export: fire only after the data layer is ready
-    if (urlParams.get('export') === 'true') {
-      _initReady.then(exportMap);
-    }
-  });
-
-  let _mapReady = false;
-  map.on('zoomend', () => {
-    if (_mapReady && _fitZoom !== undefined && map.getZoom() < _fitZoom) {
-      map.fitBounds(COG_BOUNDS, { ...FIT_OPTS, animate: !MCO.reducedMotion() });
-    }
+    if (exportOnLoad) _initReady.then(exportMap);
   });
 
   // Update the COG raster tiles to a new date (no-op if source not yet added).
@@ -446,7 +495,7 @@
 
   // Refresh whichever layers are active for the current date.
   function refreshLayers() {
-    if (!map.loaded()) return;
+    if (!_layersAdded) return;
     setSweLayer(currentDate);
     if (currentView === 'zonal') setHucLayer();
   }
@@ -455,55 +504,63 @@
   // ── Date picker ───────────────────────────────────────────────────────────
   const dateInput = document.getElementById('date-input');
   dateInput.min   = SNODAS_START;
-  dateInput.max   = todayMT();
+  dateInput.max   = latestDate;
   dateInput.value = currentDate;
 
-  async function setDate(dateStr) {
+  async function setDate(dateStr, { silent = false } = {}) {
     let d = dateStr;
-    if (d < SNODAS_START) { d = SNODAS_START; showToast(`Earliest available date: ${d}`); }
-    if (d > todayMT())    { d = todayMT();     showToast(`No future dates available`); }
+    if (d < SNODAS_START)  { d = SNODAS_START;  showToast(`The earliest date is ${MCO.formatDateStr(d)}.`); }
+    if (d > latestDate)    { d = latestDate;    showToast(`The latest date with data is ${MCO.formatDateStr(d)}.`); }
     if (d === currentDate) { dateInput.value = d; return; }
 
+    loading.start();
     if (!(await cogExists(d))) {
       const fallback = await findLatestAvailable(d);
       if (!fallback || fallback === currentDate) {
-        showToast(`No SNODAS data found near ${d}`);
+        loading.done();
+        showToast(`No SNODAS data was found near ${MCO.formatDateStr(d)}.`, 5000);
         dateInput.value = currentDate;
         return;
       }
       d = fallback;
-      showToast(`Showing latest available: ${d}`);
+      showToast(`Showing the latest available date, ${MCO.formatDateStr(d)}.`, 5000);
     }
+    loading.done();
 
     currentDate = d;
     dateInput.value = currentDate;
-    pushState();
+    if (!silent) writeUrl();
     CogProtocol.preload(cogUrl(currentDate));
     refreshLayers();
-    fetchProvenance(currentDate, METHOD).then(updateLegendMeta);
-    stepper.refresh();
+    fetchProvenance(currentDate).then(updateLegendMeta);
+    refreshSteppers();
   }
 
-  dateInput.addEventListener('change', () => setDate(dateInput.value));
+  dateInput.addEventListener('change', () => {
+    if (isIsoDate(dateInput.value)) setDate(dateInput.value);
+    else dateInput.value = currentDate;
+  });
 
-  // Date stepper — the kit's (0.9.0). The hand-rolled one listened only for
-  // mousedown/touchstart, so Enter and Space on a focused stepper did nothing
-  // (WCAG 2.1.1). MCO.initStepper steps on click (keyboard included), repeats
-  // while a pointer is held, and disables a button at its bound. The new date
-  // is announced, since the change is otherwise visible only on the map.
-  const stepper = MCO.initStepper({
-    prev: document.getElementById('btn-date-prev'),
-    next: document.getElementById('btn-date-next'),
+  // Date steppers — the kit's: a step on click (keyboard included), a repeat
+  // while a pointer is held, and a button disabled at its bound. The navbar's
+  // pair and the landscape rail's pair drive the same date. The new date is
+  // announced, since the change is otherwise visible only on the map.
+  const stepperOpts = {
     onStep: (d) => {
       setDate(MCO.shiftDate(currentDate, d))
-        .then(() => MCO.announce(`Showing ${formatDate(currentDate)}`));
+        .then(() => MCO.announce(`Showing ${MCO.formatDateStr(currentDate)}`));
     },
-    canStep: (d) => (d < 0 ? currentDate > SNODAS_START : currentDate < todayMT()),
-  });
+    canStep: (d) => (d < 0 ? currentDate > SNODAS_START : currentDate < latestDate),
+  };
+  const steppers = [
+    MCO.initStepper({ prev: document.getElementById('btn-date-prev'), next: document.getElementById('btn-date-next'), ...stepperOpts }),
+    MCO.initStepper({ prev: document.getElementById('btn-rail-prev'), next: document.getElementById('btn-rail-next'), ...stepperOpts }),
+  ];
+  function refreshSteppers() { steppers.forEach(s => s.refresh()); }
 
   // ── HUC zonal layers ──────────────────────────────────────────────────────
   const _fgbCache   = new Map(); // level → GeoJSON features array (with id field)
-  const _zonalCache = new Map(); // `${date}_${method}` → Map<zone, ptile>
+  const _zonalCache = new Map(); // `${date}_${flavor}` → Map<zone, ptile>
   let _hucSourceLevel = null;    // which level is currently loaded into the 'huc' source
 
   // The vendored Parquet reader, imported once on first use. A failed import
@@ -530,7 +587,7 @@
 
   // Preload all FGB boundary files into memory + Cache API in the background
   function preloadFgb() {
-    for (const lvl of [2, 4, 6, 8]) {
+    for (const lvl of HUC_LEVELS) {
       if (_fgbCache.has(lvl)) continue;
       (async () => {
         try {
@@ -545,32 +602,34 @@
     }
   }
 
+  // "Nothing to show" over the map, for a date on which no watershed has a
+  // percentile (no snow anywhere in the reference record, or a summer date).
+  const emptyEl = h('div', { className: 'mco-empty', hidden: true,
+    textContent: 'No watershed has snow to compare on this date.' });
+  emptyEl.dataset.place = 'over';
+  mainEl.append(emptyEl);
+
+  let _hucSeq = 0;
   async function setHucLayer() {
     if (!map.getSource('huc')) return;
+    const seq = ++_hucSeq;
+    const level = currentHucLevel, date = currentDate;
+    loading.start();
     try {
       // ── Step 1: load FGB geometry (once per level, persisted in Cache API + memory) ──
-      if (!_fgbCache.has(currentHucLevel)) {
-        const res = await fetchCached(fgbUrl(currentHucLevel));
+      if (!_fgbCache.has(level)) {
+        const res = await fetchCached(fgbUrl(level));
         if (!res.ok) throw new Error(`FGB fetch failed: ${res.status}`);
         const features = [];
         for await (const f of flatgeobuf.deserialize(res.body))
           features.push({ ...f, id: f.properties.huc });
-        _fgbCache.set(currentHucLevel, features);
+        _fgbCache.set(level, features);
       }
 
-      // ── Step 2: push geometry to source only when the level changes ──
-      if (_hucSourceLevel !== currentHucLevel) {
-        map.getSource('huc').setData({
-          type: 'FeatureCollection',
-          features: _fgbCache.get(currentHucLevel),
-        });
-        _hucSourceLevel = currentHucLevel;
-      }
-
-      // ── Step 3: load parquet lookup (small — cached in memory) ──
-      const key = `${currentDate}_${METHOD}`;
+      // ── Step 2: load parquet lookup (small — cached in memory) ──
+      const key = `${date}_${FLAVOR}`;
       if (!_zonalCache.has(key)) {
-        const res = await fetch(zonalUrl(currentDate, METHOD));
+        const res = await fetch(zonalUrl(date));
         if (!res.ok) throw new Error(`Parquet fetch failed: ${res.status}`);
         const ab = await res.arrayBuffer();
         const pq = await parquetLib();
@@ -584,23 +643,36 @@
           if (zone != null) lookup.set(String(zone), swe_ptile ?? null);
         _zonalCache.set(key, lookup);
       }
+      // A newer call (another date step, another level) has taken over.
+      if (seq !== _hucSeq || currentView !== 'zonal') return;
+
+      // ── Step 3: push geometry to source only when the level changes ──
+      if (_hucSourceLevel !== level) {
+        map.getSource('huc').setData({ type: 'FeatureCollection', features: _fgbCache.get(level) });
+        _hucSourceLevel = level;
+      }
 
       // ── Step 4: push swe_ptile as feature state (no geometry re-upload) ──
       const zonalData = _zonalCache.get(key);
       const rows = [];
-      for (const f of _fgbCache.get(currentHucLevel)) {
+      for (const f of _fgbCache.get(level)) {
         const ptile = zonalData.get(String(f.properties.huc)) ?? null;
         map.setFeatureState({ source: 'huc', id: f.id }, { swe_ptile: ptile });
         rows.push({ id: String(f.properties.huc), name: f.properties.name, huc: f.properties.huc, ptile });
       }
       renderTwin(rows);
+      emptyEl.hidden = rows.some(r => r.ptile != null);
 
       map.setLayoutProperty('huc-fill', 'visibility', 'visible');
       map.setLayoutProperty('huc-line', 'visibility', 'visible');
       map.setLayoutProperty('swe',      'visibility', 'none');
+      loading.done();
     } catch (err) {
       console.error('[setHucLayer]', err);
-      showToast('Failed to load basin data');
+      if (seq !== _hucSeq) return;
+      // A danger notice with Retry, announced assertively (§5.1: load
+      // failures are the one assertive case).
+      loading.fail('Watershed data failed to load.', { retry: setHucLayer });
     }
   }
 
@@ -609,7 +681,9 @@
   // drawn watershed and its percentile (the kit caps it at 500 rows; HUC8 has
   // more, and the overflow row says so). The gridded raster has no tabular
   // form — its AT path is the click-to-pin reading — so the twin is empty
-  // there and the map's label says which applies.
+  // there and the map's label says which applies. The kit mounts it in
+  // <main> and ends the caption with the row count; the level and date are
+  // in the map's label, which introduces the table.
   const mapEl = document.getElementById('map');
   const twin = MCO.srTable({
     caption: 'Watershed SWE percentiles',
@@ -623,31 +697,54 @@
   function renderTwin(rows) {
     if (rows) rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     twin.render(rows || []);
-    twin.element.querySelector('caption').textContent = rows
-      ? `Watershed SWE percentiles, HUC${currentHucLevel}, ${currentDate}, ${METHOD_LABEL} (${rows.length})`
-      : 'Watershed SWE percentiles: shown in the zonal view only (0)';
     mapEl.setAttribute('aria-label', rows
-      ? `SWE percentile map, zonal view, HUC${currentHucLevel}. The data is in the table that follows.`
+      ? `SWE percentile map, zonal view, HUC${currentHucLevel} watersheds, ${MCO.formatDateStr(currentDate)}, ${FLAVOR_LABEL}. The data is in the table that follows.`
       : 'SWE percentile map, gridded view. Click or tap the map to hear the percentile at that point.');
   }
   if (currentView !== 'zonal') renderTwin(null);
 
-  function setHucLevel(lvl) {
+  // ── View and HUC level ────────────────────────────────────────────────────
+  // Radio fieldsets with <select> twins below 1400px (the ladder rung where
+  // this bar sheds), one source of truth each: MCO.initSegmentedFallback.
+  const hucGroup = document.getElementById('huc-group');
+  const viewCtl = MCO.initSegmentedFallback({
+    group: document.getElementById('view-btns'),
+    select: document.getElementById('view-select'),
+    mq: '(max-width: 1400px)',
+    onChange: (v) => setView(v),
+  });
+  const hucCtl = MCO.initSegmentedFallback({
+    group: document.getElementById('huc-btns'),
+    select: document.getElementById('huc-select'),
+    mq: '(max-width: 1400px)',
+    onChange: (v) => setHucLevel(parseInt(v, 10)),
+  });
+  viewCtl.set(currentView);
+  hucCtl.set(String(currentHucLevel));
+  hucGroup.hidden = currentView !== 'zonal';
+
+  function setHucLevel(lvl, { silent = false } = {}) {
+    if (lvl === currentHucLevel) return;
     currentHucLevel = lvl;
-    document.querySelectorAll('[data-huc]').forEach(btn =>
-      btn.setAttribute('aria-pressed', parseInt(btn.dataset.huc) === lvl ? 'true' : 'false'));
-    pushState();
-    if (map.loaded()) setHucLayer();
+    hucCtl.set(String(lvl));
+    if (!silent) { writeUrl(); MCO.announce(`HUC${lvl} watersheds`); }
+    if (_layersAdded) setHucLayer();
   }
 
-  function setView(v) {
+  function setView(v, { silent = false } = {}) {
+    if (v === currentView) return;
     currentView = v;
-    document.querySelectorAll('[data-view]').forEach(btn =>
-      btn.setAttribute('aria-pressed', btn.dataset.view === v ? 'true' : 'false'));
-    document.getElementById('huc-level-group').style.display = v === 'zonal' ? '' : 'none';
-    pushState();
-    if (!map.loaded()) return;
+    viewCtl.set(v);
+    hucGroup.hidden = v !== 'zonal';
+    if (!silent) {
+      writeUrl();
+      MCO.announce(v === 'zonal' ? `Zonal view, HUC${currentHucLevel} watersheds` : 'Gridded view');
+    }
+    if (!_layersAdded) return;
     if (v === 'gridded') {
+      _hucSeq++;            // abandon a zonal load still in flight
+      loading.done();
+      emptyEl.hidden = true;
       renderTwin(null);
       map.setLayoutProperty('swe',      'visibility', 'visible');
       map.setLayoutProperty('huc-fill', 'visibility', 'none');
@@ -657,18 +754,22 @@
     }
   }
 
-  // Wire up all segmented toggles and sync initial aria-pressed state
-  document.querySelectorAll('[data-view]').forEach(btn => {
-    btn.setAttribute('aria-pressed', btn.dataset.view === currentView ? 'true' : 'false');
-    btn.addEventListener('click', () => setView(btn.dataset.view));
-  });
-  document.getElementById('huc-level-group').style.display = currentView === 'zonal' ? '' : 'none';
-  document.querySelectorAll('[data-huc]').forEach(btn => {
-    btn.setAttribute('aria-pressed', parseInt(btn.dataset.huc) === currentHucLevel ? 'true' : 'false');
-    btn.addEventListener('click', () => setHucLevel(parseInt(btn.dataset.huc)));
+  // ── Back / Forward ────────────────────────────────────────────────────────
+  // Everything here is a view adjustment, so it is replaced, never pushed;
+  // a history move only differs from the page when an entry was written by
+  // hand. Follow it silently: the entry is already the URL.
+  MCO.onUrlState((params) => {
+    const d = params.get('date');
+    if (isIsoDate(d) && d !== currentDate) setDate(d, { silent: true });
+    const v = (params.get('view') || 'gridded').toLowerCase();
+    const lvl = parseInt(params.get('huc'), 10);
+    if (HUC_LEVELS.includes(lvl)) setHucLevel(lvl, { silent: true });
+    if (VIEWS.includes(v)) setView(v, { silent: true });
   });
 
   // ── Hover tooltip ─────────────────────────────────────────────────────────
+  // App-owned rather than MCO.map.initCursorTooltip: the gridded reading is
+  // an async raster sample, not a rendered feature.
   const tooltip = document.getElementById('tooltip');
   let _hoverSeq = 0;
 
@@ -679,6 +780,11 @@
     tooltip.style.top  = `${e.originalEvent.clientY + 14}px`;
   }
 
+  function zonalPtile(huc) {
+    const zonal = _zonalCache.get(`${currentDate}_${FLAVOR}`);
+    return zonal ? (zonal.get(String(huc)) ?? null) : null;
+  }
+
   map.on('mousemove', async (e) => {
     const seq = ++_hoverSeq;
 
@@ -686,13 +792,9 @@
     if (currentView === 'zonal') {
       const hits = map.queryRenderedFeatures(e.point, { layers: ['huc-fill'] });
       if (hits.length > 0) {
-        if (seq !== _hoverSeq) return;
         const { name, huc } = hits[0].properties;
         const label = name || `HUC${currentHucLevel} ${huc}`;
-        const zonalKey = `${currentDate}_${METHOD}`;
-        const ptile = _zonalCache.has(zonalKey)
-          ? (_zonalCache.get(zonalKey).get(String(huc)) ?? null)
-          : null;
+        const ptile = zonalPtile(huc);
         showTooltip(ptile != null ? `${label}: ${ordinal(Math.round(ptile))} percentile` : label, e);
         return;
       }
@@ -707,25 +809,19 @@
 
   map.on('mouseout', () => tooltip.classList.remove('visible'));
 
-  // Tap feedback for touch devices in zonal view
-  // Click or tap pins a reading and announces it. Previously this only fired in
-  // zonal view, which left the GRIDDED raster reachable by hover alone — no
-  // touch path and nothing for assistive tech, since a hover tooltip is never
-  // surfaced. The same gesture now answers in both views.
+  // Click or tap pins a reading and announces it, in both views: it is the
+  // touch path and the assistive-tech path to a value, since a hover tooltip
+  // is never surfaced.
   map.on('click', async (e) => {
     if (currentView === 'zonal') {
       const hits = map.queryRenderedFeatures(e.point, { layers: ['huc-fill'] });
       if (!hits.length) return;
       const { name, huc } = hits[0].properties;
-      const label    = name || `HUC${currentHucLevel} ${huc}`;
-      const zonalKey = `${currentDate}_${METHOD}`;
-      const ptile    = _zonalCache.has(zonalKey)
-        ? (_zonalCache.get(zonalKey).get(String(huc)) ?? null)
-        : null;
-      const msg = ptile != null
+      const label = name || `HUC${currentHucLevel} ${huc}`;
+      const ptile = zonalPtile(huc);
+      pinReading(ptile != null
         ? `${label}: ${ordinal(Math.round(ptile))} percentile`
-        : `${label}: no data`;
-      pinReading(msg);
+        : `${label}: no data`);
       return;
     }
 
@@ -733,21 +829,38 @@
     const value = await CogProtocol.queryValue(cogUrl(currentDate), e.lngLat.lng, e.lngLat.lat);
     const where = `${Math.abs(e.lngLat.lat).toFixed(2)}°${e.lngLat.lat >= 0 ? 'N' : 'S'}, `
                 + `${Math.abs(e.lngLat.lng).toFixed(2)}°${e.lngLat.lng >= 0 ? 'E' : 'W'}`;
-    const msg = value == null
+    pinReading(value == null
       ? `No snowpack data at ${where}`
-      : `${ordinal(value)} percentile at ${where}`;
-    pinReading(msg);
+      : `${ordinal(value)} percentile at ${where}`);
   });
 
   // ── Share ─────────────────────────────────────────────────────────────────
-  document.getElementById('btn-share').addEventListener('click', async () => {
+  // Copy the current (deep-link) URL. The async Clipboard API where available,
+  // an execCommand fallback, and always a toast, so the press has visible
+  // feedback even when the clipboard is blocked (the photo explorer's).
+  async function copyShareLink() {
+    const url = location.href;
     try {
-      await navigator.clipboard.writeText(location.href);
-      showToast('Link copied to clipboard!');
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+        showToast('Link copied to clipboard!');
+        return;
+      }
+    } catch { /* fall through to the execCommand fallback */ }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast(ok ? 'Link copied to clipboard!' : `Copy this link: ${url}`, ok ? undefined : 6000);
     } catch {
-      showToast('Could not copy — try selecting the URL bar directly');
+      showToast(`Copy this link: ${url}`, 6000);
     }
-  });
+  }
+  document.getElementById('btn-share').addEventListener('click', copyShareLink);
 
   // ── Export ────────────────────────────────────────────────────────────────
   // HOUSE-STYLE §1 Logo (kit 0.11.0): exports draw the WORDMARK from the
@@ -794,10 +907,9 @@
     const FOOT_H  = px(80);
     const MAP_H   = px(700) - TITLE_H - FOOT_H;
     const PAD     = px(20);
-    // Chrome colors and fonts from the live theme (MCO.chartTokens, kit 0.9.0)
-    // instead of hand-copied hexes. The copies knew two themes, so a
-    // high-contrast export came out in the dark palette. Bands are the
-    // surface tone; the rules are the brand --accent (a fill, so allowed).
+    // Chrome colors and fonts from the live theme (MCO.chartTokens) instead
+    // of hand-copied hexes. Bands are the surface tone; the rules are the
+    // brand --accent (a fill, so allowed).
     const T = MCO.chartTokens();
     const C = {
       bg:     T.surface,
@@ -856,7 +968,7 @@
 
     ctx.fillStyle = C.muted;
     ctx.font = `400 ${px(10)}px ${UI}`;
-    ctx.fillText(`${currentDate} · ${METHOD_LABEL} · ${viewLabel}`, textX, TITLE_H * 0.78);
+    ctx.fillText(`${currentDate} · ${FLAVOR_LABEL} · ${viewLabel}`, textX, TITLE_H * 0.78);
 
     ctx.textAlign = 'right';
     ctx.font = `400 ${px(9)}px ${UI}`;
@@ -884,20 +996,19 @@
     ctx.fillStyle = C.accent;
     ctx.fillRect(0, footY, W, px(2));
 
-    const prov  = await fetchProvenance(currentDate, METHOD);
+    const prov  = await fetchProvenance(currentDate);
     const midFY = footY + FOOT_H / 2;
     ctx.textBaseline = 'middle';
 
     // Left: title + method + date + ref period
     ctx.fillStyle = C.text;
     ctx.font = `600 ${px(9)}px ${UI}`;
-    ctx.fillText(`SWE PERCENTILE · ${METHOD_LABEL}`, PAD, midFY - px(14));
+    ctx.fillText(`SWE PERCENTILE · ${FLAVOR_LABEL}`, PAD, midFY - px(14));
     if (prov) {
-      const years = prov.reference_dates.map(d => d.slice(0, 4));
       ctx.fillStyle = C.muted;
       ctx.font = `400 ${px(7.5)}px ${MONO}`;
-      ctx.fillText(formatDate(prov.normals_date), PAD, midFY);
-      ctx.fillText(`${years[0]}\u2013${years[years.length - 1]}`, PAD, midFY + px(14));
+      ctx.fillText(MCO.formatDateStr(prov.normals_date), PAD, midFY);
+      ctx.fillText(refRange(prov), PAD, midFY + px(14));
     }
 
     // Right: attribution
@@ -917,7 +1028,7 @@
     ctx.font = `400 ${px(8)}px ${UI}`;
     const legItems = BREAKS.map((lo, i) => {
       const hi  = i + 1 < BREAKS.length ? BREAKS[i + 1] : null;
-      const lbl = lo === 0 ? `< ${hi}` : hi === null ? `\u2265 ${lo}` : `${lo}\u2013${hi}`;
+      const lbl = lo === 0 ? `< ${hi}` : hi === null ? `≥ ${lo}` : `${lo}–${hi}`;
       return { color: COLORS[i], lbl, lw: ctx.measureText(lbl).width };
     });
     const legW = legItems.reduce((s, { lw }) => s + swW + swGap + lw, 0)
@@ -949,109 +1060,92 @@
     });
   }
 
-  document.getElementById('btn-export').addEventListener('click', exportMap);
-
   // ── Nav rail (kit 0.10.0) ─────────────────────────────────────────────────
   // Landscape phones: the bar becomes a left rail; its menu button opens the
   // drawer with the controls (focus in, page inert, Esc / scrim back to it).
+  // Export closes the drawer first, because the map has to be visible for it.
+  // The info button leaves it open: the dialog wins Esc and returns focus
+  // inside the drawer (HOUSE-STYLE §3 Short landscape).
   const rail = MCO.initNavRail({
     toggle: document.getElementById('btn-rail-menu'),
     drawer: document.getElementById('nav-drawer'),
     scrim:  document.getElementById('rail-scrim'),
   });
+  document.getElementById('btn-export').addEventListener('click', () => {
+    rail.close({ restoreFocus: false });
+    exportMap();
+  });
 
   // ── Info modal ────────────────────────────────────────────────────────────
   const infoModal = document.getElementById('info-modal');
+  MCO.initInfoModal({ dialog: infoModal, trigger: document.getElementById('btn-info') });
+  document.getElementById('info-credit').textContent = MCO.credit({ source: 'NOAA SNODAS' });
 
-  let _infoOpener = null;
-  document.getElementById('btn-info').addEventListener('click', () => {
-    _infoOpener = document.activeElement;
-    // In rail mode the info button lives in the nav drawer, which makes the
-    // rest of the page inert while open: close it first (focus does not go
-    // back to the toggle — the dialog takes it), and return focus to the
-    // rail's menu button, since the closed drawer's buttons are display:none.
-    if (rail.isOpen()) {
-      rail.close({ restoreFocus: false });
-      _infoOpener = document.getElementById('btn-rail-menu');
-    }
-    infoModal.showModal();
-  });
-  document.getElementById('btn-info-close').addEventListener('click', () => infoModal.close());
-  infoModal.addEventListener('click', (e) => { if (e.target === infoModal) infoModal.close(); });
-  infoModal.addEventListener('keydown', (e) => { if (e.key === 'Escape') infoModal.close(); });
-  infoModal.addEventListener('close', () => { _infoOpener?.focus(); _infoOpener = null; });
-
-  // Show on first visit
-  try {
-    if (!MCO.lsGet('mco-snodas-info-seen')) {
-      infoModal.showModal();
-      MCO.lsSet('mco-snodas-info-seen', '1');
-    }
-  } catch {}
+  // First-visit auto-open, once. Not over a deep link (someone following a
+  // shared view shouldn't land behind a help dialog), not in an export run,
+  // not over another dialog, and never once the visitor has started using
+  // the page — focus has left <body> (WCAG 3.2.1). The seen flag is written
+  // at open time, so an unclosed dialog still counts.
+  const DEEP_LINK_PARAMS = ['date', 'view', 'huc', 'lng', 'export'];
+  const hasDeepLink = DEEP_LINK_PARAMS.some(k => urlParams.has(k));
+  const seenIntro = MCO.lsGet(LS_INFO_SEEN) === '1' || MCO.lsGet(LS_INFO_SEEN_OLD) === '1';
+  if (!seenIntro && !hasDeepLink) {
+    setTimeout(() => {
+      const idle = !document.activeElement || document.activeElement === document.body;
+      if (idle && !document.querySelector('dialog[open]')) {
+        infoModal.showModal();
+        MCO.lsSet(LS_INFO_SEEN, '1');
+      }
+    }, 350);
+  }
 
   // ── Provenance modal ──────────────────────────────────────────────────────
   const provenanceModal = document.getElementById('provenance-modal');
+  const provenanceCtl = MCO.initInfoModal({ dialog: provenanceModal });
 
   const FLAVOR_DESC = {
     zig:  'Percentiles are estimated using a zero-inflated gamma distribution fit by L-moments, which smooths over sparse historical records and can extrapolate beyond observed extremes.',
   };
+  const WBD_URL    = 'https://www.usgs.gov/national-hydrography/watershed-boundary-dataset';
+  const SNODAS_URL = 'https://nsidc.org/data/g02158';
+
+  const link = (href, text) => h('a', { href, target: '_blank', rel: 'noopener', textContent: text });
+  const section = (title, ...body) => h('div', { className: 'info-section' }, h('h3', { textContent: title }), ...body);
 
   function showProvenance(prov) {
-    if (!prov) return;
+    if (!prov) { showToast('Details for this date are not available yet.'); return; }
     const methodLabel = { zig: 'ZIG' }[prov.flavor] || prov.flavor;
     document.getElementById('provenance-modal-subtitle').textContent =
-      `${formatDate(prov.normals_date)} · ${methodLabel}`;
+      `${MCO.formatDateStr(prov.normals_date)} · ${methodLabel}`;
 
-    const years    = prov.reference_dates.map(d => d.slice(0, 4));
-    const refRange = `${years[0]}\u2013${years[years.length - 1]}`;
     const computedAt = new Date(prov.computed_at).toLocaleString('en-US', {
-      month: 'long', day: 'numeric', year: 'numeric',
+      timeZone: MCO.TZ, month: 'long', day: 'numeric', year: 'numeric',
       hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
     });
-    const datesHtml = prov.reference_dates
-      .map(d => `<span>${formatDate(d)}</span>`).join('');
+    const hucText = currentView === 'zonal'
+      ? `, aggregated to HUC${currentHucLevel}.`
+      : ', available at HUC levels 2, 4, 6, and 8.';
 
-    const hucDesc = currentView === 'zonal'
-      ? `Watershed boundaries are from the <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset" target="_blank" rel="noopener">USGS Watershed Boundary Dataset</a> (WBD), aggregated to HUC${currentHucLevel}.`
-      : `Watershed boundaries are from the <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset" target="_blank" rel="noopener">USGS Watershed Boundary Dataset</a> (WBD), available at HUC levels 2, 4, 6, and 8.`;
+    document.getElementById('provenance-content').replaceChildren(
+      section('Gridded data', h('p', {},
+        link(SNODAS_URL, 'NOAA SNODAS'),
+        ' (Snow Data Assimilation System) provides daily ~1 km gridded Snow Water Equivalent estimates for the contiguous United States, available from 2004 to present.')),
+      section('Zonal data', h('p', {},
+        'Watershed boundaries are from the ', link(WBD_URL, 'USGS Watershed Boundary Dataset'), ` (WBD)${hucText}`)),
+      section(`${methodLabel} method`, h('p', { textContent: FLAVOR_DESC[prov.flavor] || '' })),
+      section('Reference period', h('p', { textContent: `${prov.n_reference_years} SNODAS dates spanning ${refRange(prov)}.` })),
+      section('Reference dates', h('ul', { className: 'provenance-dates' },
+        ...prov.reference_dates.map(d => h('li', { textContent: MCO.formatDateStr(d) })))),
+      section('Computed', h('p', { textContent: computedAt })),
+    );
 
-    document.getElementById('provenance-content').innerHTML = `
-      <div class="info-section">
-        <h3>Gridded data</h3>
-        <p><a href="https://nsidc.org/data/g02158" target="_blank" rel="noopener">NOAA SNODAS</a> (Snow Data Assimilation System) provides daily ~1&thinsp;km gridded Snow Water Equivalent estimates for the contiguous United States, available from 2004 to present.</p>
-      </div>
-      <div class="info-section">
-        <h3>Zonal data</h3>
-        <p>${hucDesc}</p>
-      </div>
-      <div class="info-section">
-        <h3>${methodLabel} method</h3>
-        <p>${FLAVOR_DESC[prov.flavor] || ''}</p>
-      </div>
-      <div class="info-section">
-        <h3>Reference period</h3>
-        <p>${prov.n_reference_years} SNODAS dates spanning ${refRange}.</p>
-      </div>
-      <div class="info-section">
-        <h3>Reference dates</h3>
-        <div class="provenance-dates">${datesHtml}</div>
-      </div>
-      <div class="info-section">
-        <h3>Computed</h3>
-        <p>${computedAt}</p>
-      </div>`;
-
-    provenanceModal.showModal();
+    provenanceCtl.open();
   }
 
-  let _provenanceOpener = null;
   document.getElementById('legend-info-btn').addEventListener('click', () => {
-    _provenanceOpener = document.activeElement;
-    fetchProvenance(currentDate, METHOD).then(showProvenance);
+    fetchProvenance(currentDate).then(showProvenance);
   });
-  document.getElementById('btn-provenance-close').addEventListener('click', () => provenanceModal.close());
-  provenanceModal.addEventListener('click', (e) => { if (e.target === provenanceModal) provenanceModal.close(); });
-  provenanceModal.addEventListener('close', () => { _provenanceOpener?.focus(); _provenanceOpener = null; });
 
+  updateRail();
 
 })().catch(e => console.error('[init]', e));
