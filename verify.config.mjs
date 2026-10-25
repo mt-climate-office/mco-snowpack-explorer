@@ -167,7 +167,7 @@ export default {
     {
       const { page, close } = await open('?date=2025-09-01&view=zonal&huc=2&basin=03&plot=hypsomeswe', { ready: () => !document.getElementById('basin-empty').hidden, timeout: 45000 });
       const r = await page.evaluate(() => ({ text: document.getElementById('basin-empty').textContent, button: document.querySelector('#basin-empty button')?.textContent }));
-      check('basin: a missing HypsomeSWE plot is explained, with Show the SWE plot', /no HypsomeSWE plot/.test(r.text) && r.button === 'Show the SWE plot', JSON.stringify(r));
+      check('basin: a missing HypsomeSWE plot is explained, with Show the SWE plot', /No HypsomeSWE plot/.test(r.text) && r.button === 'Show the SWE plot', JSON.stringify(r));
       await close();
     }
     // ?export=light downloads the branded PNG headlessly. It fires as soon as

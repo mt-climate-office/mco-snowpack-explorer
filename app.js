@@ -1253,7 +1253,7 @@
       // mco-snodas skips the HypsomeSWE plot for a basin with no snow now and
       // none in its normals; the other flavors may still have one.
       if (type === 'hypsomeswe') {
-        showBasinEmpty(`There is no HypsomeSWE plot for ${name} on ${MCO.formatDateStr(date)}: it has no snow on that date and none in its ${flavorName(flavor).toLowerCase()}.`,
+        showBasinEmpty(`No HypsomeSWE plot for ${name} on ${MCO.formatDateStr(date)}. The watershed has no snow on that date and none in its ${flavorName(flavor).toLowerCase()}.`,
           { label: 'Show the SWE plot', onClick: () => setPlotType('swe'), focus: basinPlotFs.querySelector('input[value="swe"]') });
       } else {
         showBasinEmpty(`The plot for ${name} failed to load.`, { label: 'Retry', onClick: renderBasin, focus: basinDate });
@@ -1521,6 +1521,8 @@
   const infoModal = document.getElementById('info-modal');
   MCO.initInfoModal({ dialog: infoModal, trigger: document.getElementById('btn-info') });
   document.getElementById('info-credit').textContent = MCO.credit({ source: 'NOAA SNODAS' });
+  // Dates that move are read from the code's own constants, never typed into copy.
+  for (const el of document.querySelectorAll('[data-fill="earliest-date"]')) el.textContent = MCO.formatDateStr(SNODAS_START);
 
   // First-visit auto-open, once. Not over a deep link (someone following a
   // shared view shouldn't land behind a help dialog), not in an export run,
@@ -1549,9 +1551,9 @@
   const FLAVOR_DESC = {
     zig_smooth: 'A zero-adjusted gamma distribution whose parameters change smoothly through the snow year (cyclic P-splines), fit to every day of the reference record at once. Neighbouring days share information, so the normal for one date does not jump around from the next.',
     zig:        'A zero-inflated gamma distribution fit separately for each calendar day by L-moments, which smooths over sparse records and can extrapolate beyond observed extremes. Pixels with fewer than four snowy reference years fall back to the empirical distribution.',
-    ecdf:       'The empirical distribution of the reference years for that calendar day, with no fitted curve: this year is ranked directly against past years. With about 20 reference years it cannot extrapolate beyond the observed record.',
+    ecdf:       'The empirical distribution of the reference years for that calendar day, with no fitted curve. This year is ranked directly against them, so it cannot be ranked beyond the highest or lowest year in the record.',
   };
-  const ZERO_NOTE = 'All three treat bare ground as its own case: zero SWE sits at the middle of the share of reference years that were also bare, so a place that is always bare on that date reads 50.';
+  const ZERO_NOTE = 'All three count bare ground separately. Zero SWE sits at the middle of the share of reference years that were also bare, so a place that is always bare on that date reads 50.';
   const NORMALS_DOC = `${DATA_HOST}/snodas/normals/README.md`;   // mco-snodas s3-docs, published with the data
   const WBD_URL    = 'https://www.usgs.gov/national-hydrography/watershed-boundary-dataset';
   const SNODAS_URL = 'https://nsidc.org/data/g02158';
@@ -1576,7 +1578,7 @@
     document.getElementById('provenance-content').replaceChildren(
       section('Gridded data', h('p', {},
         link(SNODAS_URL, 'NOAA SNODAS'),
-        ' (Snow Data Assimilation System) provides daily ~1 km gridded Snow Water Equivalent estimates for the contiguous United States, available from 2004 to present.')),
+        ' (Snow Data Assimilation System) estimates snow water equivalent once a day on a 1 km grid across the contiguous United States. Its record starts in late 2003.')),
       section('Zonal data', h('p', {},
         'Watershed boundaries are from the ', link(WBD_URL, 'USGS Watershed Boundary Dataset'), ` (WBD)${hucText}`)),
       section(methodLabel, h('p', { textContent: FLAVOR_DESC[prov.flavor] || '' }), h('p', { textContent: ZERO_NOTE }),

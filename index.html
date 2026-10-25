@@ -32,7 +32,7 @@
        without it the kit's safe-area paddings silently compute to 0. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Snowpack · MCO</title>
-  <meta name="description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
+  <meta name="description" content="Daily snowpack percentiles for the lower 48 states and their watersheds, from NOAA SNODAS. A service of the Montana Climate Office.">
   <meta name="author" content="Montana Climate Office">
   <meta name="theme-color" content="#1a6faf" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#161b22" media="(prefers-color-scheme: dark)">
@@ -52,7 +52,7 @@
   <meta property="og:type"        content="website">
   <meta property="og:site_name"   content="Montana Climate Office">
   <meta property="og:title"       content="Snowpack · Montana Climate Office">
-  <meta property="og:description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
+  <meta property="og:description" content="Daily snowpack percentiles for the lower 48 states and their watersheds, from NOAA SNODAS. A service of the Montana Climate Office.">
   <meta property="og:url"         content="https://snow.climate.umt.edu/">
   <meta property="og:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.18.0/assets/og-card.png">
   <meta property="og:image:width"  content="1200">
@@ -60,7 +60,7 @@
   <meta property="og:image:alt"   content="Montana Climate Office">
   <meta name="twitter:card"        content="summary_large_image">
   <meta name="twitter:title"       content="Snowpack · Montana Climate Office">
-  <meta name="twitter:description" content="Daily snow data derived from the NOAA SNODAS product, processed by the Montana Climate Office.">
+  <meta name="twitter:description" content="Daily snowpack percentiles for the lower 48 states and their watersheds, from NOAA SNODAS. A service of the Montana Climate Office.">
   <meta name="twitter:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.18.0/assets/og-card.png">
   <meta name="twitter:image:alt"   content="Montana Climate Office">
 
@@ -552,56 +552,92 @@
       <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
     </div>
 
+    <!-- Plain words first, method last (website VOICE.md). The method lives
+         in the legend's "About this data" dialog. Dates that move (the first
+         date with percentiles) are filled from app.js, never typed here. -->
     <div class="info-section">
       <h3>About</h3>
-      <p>The Snowpack Explorer maps daily <strong>Snow Water Equivalent (SWE) percentiles</strong>
-         across the contiguous United States, comparing current snowpack to the same calendar day
-         across all available historical years. Values near <strong>0</strong> indicate historically
-         low snowpack; values near <strong>100</strong> indicate historically high snowpack.</p>
+      <p>The map ranks each day's snowpack against the same calendar day in past years. A percentile
+         of 50 is a typical amount of snow for that date. A percentile of 10 means only one past year
+         in ten had less.</p>
+      <p>The snow data is NOAA's <a href="https://nsidc.org/data/g02158" target="_blank" rel="noopener">SNODAS</a>
+         model of snow water equivalent (SWE): the depth of water the snowpack would make if it melted.
+         It covers the lower 48 states on a 1&thinsp;km grid, once a day. Percentiles start on
+         <span data-fill="earliest-date">September 1, 2025</span>.</p>
     </div>
 
     <div class="info-section">
-      <h3>Views</h3>
+      <h3>What the colors mean</h3>
+      <p>The colors and category names follow the
+         <a href="https://droughtmonitor.unl.edu" target="_blank" rel="noopener">U.S. Drought Monitor</a>.</p>
       <ul>
-        <li><strong>Gridded</strong> — ~1&thinsp;km raster of SWE percentiles derived directly from
-            <a href="https://nsidc.org/data/g02158" target="_blank" rel="noopener">NOAA SNODAS</a>.</li>
-        <li><strong>Zonal</strong> — area-weighted mean SWE percentiles aggregated to
-            <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset" target="_blank" rel="noopener">USGS Watershed Boundary Dataset</a>
-            (WBD) units at HUC levels 2, 4, 6, and 8. Hover over a watershed, or click or tap it, for its name and percentile.</li>
+        <li><strong>D0 to D4</strong> (yellow to dark red) mark less snow than usual for the date. D4 is
+            below the 2nd percentile.</li>
+        <li><strong>Near normal</strong> (white) is the 30th to 70th percentile.</li>
+        <li><strong>W0 to W4</strong> (light to dark blue) mark more snow than usual. W4 is above the
+            98th percentile.</li>
+      </ul>
+      <p>A place with no snow on a date when it is always bare reads 50, near normal.</p>
+    </div>
+
+    <div class="info-section">
+      <h3>Using the explorer</h3>
+      <ul>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg></span><strong>Date</strong>. Pick a day, or step one day at a time with ▲ and ▼.</li>
+        <li><strong>View</strong>. Gridded shows every 1&thinsp;km cell. Zonal averages over watersheds, from
+            the largest (HUC2 regions) to the smallest (HUC8 subbasins); choose the size with Level.</li>
+        <li><strong>Normals</strong>. The past years each day is measured against. Smoothed is the default;
+            the three choices are explained below.</li>
+        <li><strong>Click or tap the map</strong>. In the gridded view this reads out the percentile at that
+            point. In the zonal view it opens that watershed's plots. With a keyboard, the watersheds
+            are also a table after the map: press <kbd>Enter</kbd> on a row to open its plots.</li>
+        <li><strong>Zoom and pan</strong>. Scroll or pinch to zoom and drag to pan. The buttons at top right
+            zoom in, zoom out, and return to the whole country.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><strong>Share</strong>. Copies a link to exactly this view, open plots included.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><strong>Export</strong>. Downloads the map as a PNG with its legend.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><strong>Theme</strong>. Switches between dark, light and high contrast.</li>
       </ul>
     </div>
 
     <div class="info-section">
-      <h3>Percentile method</h3>
-      <p>Percentiles are estimated with a <strong>zero-inflated gamma (ZIG)</strong> distribution fit
-         by L-moments, which smooths sparse records and extrapolates beyond observed extremes.</p>
-      <p>Press the <strong>About this data</strong> button in the legend for reference dates and full provenance
-         details for the current date.</p>
-    </div>
-
-    <div class="info-section">
-      <h3>Color scale</h3>
-      <p>Colors follow the <a href="https://droughtmonitor.unl.edu" target="_blank" rel="noopener">U.S. Drought Monitor</a>
-         convention — reds indicate low snowpack (drought conditions), white near-normal, and blues
-         exceptionally high snowpack.</p>
-    </div>
-
-    <div class="info-section">
-      <h3>Navigation</h3>
+      <h3>Which normals should I use?</h3>
+      <p>Each choice turns the past years for a date into a range of normal snow in a different way.</p>
       <ul>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg></span><strong>Date</strong> — Use the date picker or ▲▼ arrows to step through days.</li>
-        <li><strong>Scroll</strong> or <strong>pinch</strong> to zoom the map; drag to pan.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><strong>Share</strong> — Copy a link to the current view to your clipboard.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><strong>Export</strong> — Download a PNG of the current map.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><strong>Theme</strong> — Step through dark, light and high-contrast themes.</li>
+        <li><strong>Smoothed</strong> (the default) fits one curve through the whole snow year, so each day's
+            normal leans on the days around it. It is the steadiest from one day to the next.</li>
+        <li><strong>Fitted</strong> fits a curve to each calendar day on its own.</li>
+        <li><strong>Empirical</strong> ranks this year directly against the past years for that day, with no
+            curve. It is the most literal, and the noisiest, and it can't rank snow beyond the most or
+            least on record.</li>
       </ul>
+      <p>The three differ most where few past years had snow on the date, such as early and late in the
+         season and at low elevations.</p>
     </div>
 
     <div class="info-section">
-      <h3>Data &amp; processing</h3>
-      <p>SNODAS daily SWE grids are available from January 1, 2004 to present. Percentiles and watershed
-         aggregations are processed and hosted by the
-         <a href="https://climate.umt.edu" target="_blank" rel="noopener">Montana Climate Office</a>.</p>
+      <h3>Watershed plots</h3>
+      <p>In the zonal view, click or tap a watershed for its plots. The date and normals in the plot
+         window are the map's own: change them there and the map changes too.</p>
+      <ul>
+        <li><strong>SWE</strong> shows the watershed's snow water, in acre-feet, through the whole snow year
+            (September 1 to August 31). The colored bands are the range of past years; the black line is
+            this year.</li>
+        <li><strong>HypsomeSWE</strong> splits the same snow into 100-foot elevation bands. Beside it are each
+            band's percentile, its share of the median for the date, and its area.</li>
+      </ul>
+      <p>A watershed with no snow on the date and none in its normals has no HypsomeSWE plot. Plots are
+         not yet published for every date. When a date has none, the window offers the nearest date that
+         does. <strong>Data for this plot</strong>, under each plot, lists its numbers.</p>
+    </div>
+
+    <div class="info-section">
+      <h3>Data</h3>
+      <p>Snow: <a href="https://nsidc.org/data/g02158" target="_blank" rel="noopener">NOAA SNODAS</a>.
+         Watersheds: <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset" target="_blank" rel="noopener">USGS Watershed Boundary Dataset</a>.
+         Normals, percentiles and plots are computed by the
+         <a href="https://climate.umt.edu" target="_blank" rel="noopener">Montana Climate Office</a>.
+         <strong>About this data</strong>, in the legend, lists the past years used for the date shown and
+         how each set of normals is fit.</p>
       <p id="info-credit"></p>
     </div>
   </div>
