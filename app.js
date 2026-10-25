@@ -193,9 +193,9 @@
   const zonalUrl      = (d, m = currentFlavor) => `${ZONAL_ROOT}/${m}/${d}/${d}_${m}_swe_normals.parquet`;
   const provenanceUrl = (d, m = currentFlavor) => `${S3_ROOT}/${m}/${d}/${d}_${m}_provenance.json`;
 
-  async function cogExists(d) {
+  async function cogExists(d, url = cogUrl(d)) {
     try {
-      const r = await fetch(cogUrl(d), { method: 'GET', headers: { Range: 'bytes=0-3' } });
+      const r = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-3' } });
       if (!r.ok && r.status !== 206) return false;
       const buf = new Uint8Array(await r.arrayBuffer());
       // Valid TIFF starts with 'II' (0x49 0x49) or 'MM' (0x4D 0x4D)
@@ -910,8 +910,17 @@
   const tooltip = document.getElementById('tooltip');
   let _hoverSeq = 0;
 
-  // The daily SNODAS SWE grid (int16 mm, the percentile COGs' grid).
-  const sweCogUrl = (d) => `${DATA_HOST}/snodas/cogs/${d}/snodas_swe_${d.replace(/-/g, '')}.tif`;
+  // The daily SNODAS SWE grid (int16 mm, the percentile COGs' grid), and the
+  // normal's median for the date (int16 mm; the q0500 band of the quantiles
+  // COG, published on its own by mco-snodas for point queries).
+  const sweCogUrl    = (d) => `${DATA_HOST}/snodas/cogs/${d}/snodas_swe_${d.replace(/-/g, '')}.tif`;
+  const medianCogUrl = (d, m = currentFlavor) => `${S3_ROOT}/${m}/${d}/${d}_${m}_median.tif`;
+  // Whether that median exists, asked once per date and flavor: dates built
+  // before it was published have none, and the kit's reader would otherwise
+  // re-request the missing file on every pointer move.
+  function medianExists(d, m = currentFlavor) {
+    return _cache.cached(`median:${d}_${m}`, () => cogExists(d, medianCogUrl(d, m)));
+  }
 
   // The plots' subtitle wording, from mco-snodas R/plot.R snodas_conditions():
   // percent of the median for the date, then the percentile. Percent of
@@ -926,10 +935,9 @@
 
   // The reading under a map point: {title?, lines[]}, or null for no data.
   // Zonal: the watershed's row from the Parquet table (synchronous once
-  // loaded). Gridded: the percentile and SWE grids, sampled in parallel. The
-  // gridded median is in a 19-band quantiles COG the kit's reader can't
-  // decode, so percent of normal is left out there until a single-band
-  // median is published; conditions() then shows the percentile alone.
+  // loaded). Gridded: the percentile, SWE and median grids, sampled in
+  // parallel. Where the median isn't published, conditions() shows the
+  // percentile alone, as the plots do when the median is zero.
   function zonalReading(f) {
     const { name, huc } = f.properties;
     const row = _zonalCache.get(`${currentDate}_${currentFlavor}`)?.get(String(huc)) ?? null;
@@ -940,12 +948,15 @@
     };
   }
   async function griddedReading(lngLat) {
-    const [ptile, swe] = await Promise.all([
-      CogProtocol.queryValue(cogUrl(currentDate), lngLat.lng, lngLat.lat),
-      CogProtocol.queryValue(sweCogUrl(currentDate), lngLat.lng, lngLat.lat).catch(() => null),
+    const d = currentDate, m = currentFlavor;
+    const [ptile, swe, median] = await Promise.all([
+      CogProtocol.queryValue(cogUrl(d, m), lngLat.lng, lngLat.lat),
+      CogProtocol.queryValue(sweCogUrl(d), lngLat.lng, lngLat.lat).catch(() => null),
+      medianExists(d, m).then(ok => (ok ? CogProtocol.queryValue(medianCogUrl(d, m), lngLat.lng, lngLat.lat) : null))
+        .catch(() => null),
     ]);
     if (ptile == null && swe == null) return null;
-    return { lines: [MCO.formatDateStr(currentDate), conditions(swe, null, ptile), sweLine(swe)].filter(Boolean) };
+    return { lines: [MCO.formatDateStr(d), conditions(swe, median, ptile), sweLine(swe)].filter(Boolean) };
   }
 
   function showTooltip(r, e) {
