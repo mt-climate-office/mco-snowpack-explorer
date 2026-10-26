@@ -177,6 +177,10 @@
   let currentPlot  = PLOT_TYPES[getLower('plot')] ? getLower('plot') : DEFAULT_PLOT;
   const askedBasin = isHuc(urlParams.get('basin')) ? urlParams.get('basin') : null;
 
+  // ?kbd=off turns off the single-character shortcut (/ for search), the
+  // opt-out WCAG 2.1.4 asks for. Carried in every URL write.
+  const kbdShortcuts = getLower('kbd') !== 'off';
+
   // Headless export (HOUSE-STYLE §4 ?export= convention): ?export=light|dark
   // forces the theme before the map is built, set directly rather than with
   // MCO.setTheme so a scripted run never persists a theme. ?export=true, the
@@ -239,6 +243,7 @@
     }
     const theme = MCO.getTheme();
     if (theme !== MCO.osTheme()) params.theme = theme;
+    if (!kbdShortcuts) params.kbd = 'off';
     if (_mapReady) Object.assign(params, MCO.map.cameraParamsIfDefault(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS }));
     if (push) MCO.pushUrlState(params, { state });
     else MCO.replaceUrlState(params);
@@ -415,6 +420,8 @@
   });
 
   const HUC_LAYERS = ['huc-fill', 'huc-line', 'huc-focus', 'huc-selected'];
+  const EMPTY_FC = { type: 'FeatureCollection', features: [] };
+  let _searchHit = EMPTY_FC;   // the search highlight, kept across style swaps
 
   // Add custom sources and layers in the correct z-order.
   // Called on initial load and after each basemap style swap.
@@ -499,6 +506,29 @@
         id: 'domain-line', type: 'line', source: 'domain',
         paint: { 'line-color': MCO.cssVar('--text-secondary'), 'line-width': 1.5, 'line-dasharray': [3, 2] },
       }, before);
+    }
+
+    // What search last went to, in both views: a watershed's outline
+    // (--selection-ring, as the open basin's) or a city or ZIP code's point
+    // (--accent, ringed in --bg-surface so it holds on any fill). Neither is
+    // interactive. Colours read at paint time, re-read on every style.load.
+    if (!map.getSource('search-hit')) map.addSource('search-hit', { type: 'geojson', data: _searchHit });
+    if (!map.getLayer('search-hit-line')) {
+      map.addLayer({
+        id: 'search-hit-line', type: 'line', source: 'search-hit',
+        filter: ['!=', ['geometry-type'], 'Point'],
+        paint: { 'line-color': MCO.cssVar('--selection-ring'), 'line-width': 3 },
+      }, before);
+    }
+    if (!map.getLayer('search-hit-pin')) {
+      map.addLayer({
+        id: 'search-hit-pin', type: 'circle', source: 'search-hit',
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: {
+          'circle-radius': 6, 'circle-color': MCO.cssVar('--accent'),
+          'circle-stroke-width': 2, 'circle-stroke-color': MCO.cssVar('--bg-surface'),
+        },
+      }, before);   // under the basemap labels, so the town's name stays legible
     }
 
     // SWE COG — sits below HUC fills
@@ -827,25 +857,29 @@
   if (currentView !== 'zonal') renderTwin(null);
 
   // ── View and HUC level ────────────────────────────────────────────────────
-  // Radio fieldsets with <select> twins below 1400px (the ladder rung where
-  // this bar sheds), one source of truth each: MCO.initSegmentedFallback.
+  // Radio fieldsets with <select> twins, one source of truth each:
+  // MCO.initSegmentedFallback. The twins take over below 1700px, not the
+  // ladder's 1400: the zonal view's bar (search, date, three groups, labels
+  // still shown above 1400) needs about 1,650px as buttons, and wrapped to a
+  // second row between 1400 and that.
   const hucGroup = document.getElementById('huc-group');
+  const SEG_MQ = '(max-width: 1700px)';
   const viewCtl = MCO.initSegmentedFallback({
     group: document.getElementById('view-btns'),
     select: document.getElementById('view-select'),
-    mq: '(max-width: 1400px)',
+    mq: SEG_MQ,
     onChange: (v) => setView(v),
   });
   const hucCtl = MCO.initSegmentedFallback({
     group: document.getElementById('huc-btns'),
     select: document.getElementById('huc-select'),
-    mq: '(max-width: 1400px)',
+    mq: SEG_MQ,
     onChange: (v) => setHucLevel(parseInt(v, 10)),
   });
   const flavorCtl = MCO.initSegmentedFallback({
     group: document.getElementById('flavor-btns'),
     select: document.getElementById('flavor-select'),
-    mq: '(max-width: 1400px)',
+    mq: SEG_MQ,
     onChange: (f) => setFlavor(f),
   });
   viewCtl.set(currentView);
@@ -1123,6 +1157,7 @@
     if (currentView !== 'zonal') setView('zonal', { silent: true });
     if (level !== currentHucLevel) setHucLevel(level, { silent: true });
     setSelected(huc);
+    setSearchHit(null);   // the basin's own outline takes over
     refreshTwinSelection();
     writeUrl(push && !wasOpen ? { push: true, state: { mcoDetail: huc } } : {});
     if (!wasOpen) basinCtl.open();
@@ -1605,6 +1640,184 @@
   document.getElementById('btn-export').addEventListener('click', () => {
     rail.close({ restoreFocus: false });
     exportMap();
+  });
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  // One field over states, counties, cities and ZIP codes (data/places/,
+  // built from the Census Gazetteer by scripts/build-places.sh) and the
+  // watersheds the app already loads. The combobox and its ranking are the
+  // kit's (MCO.initSearchBox, MCO.searchModel sections); the collapse below
+  // 640px is MCO.initSearchCollapse. A pick moves the camera only: the plot
+  // dialog still opens from a deliberate click.
+  //
+  // Point results stop at SEARCH_POINT_ZOOM, where a town shows with its
+  // valley or range around it, so the reader keeps the region. Areas fit
+  // their bounds, no closer than SEARCH_AREA_MAX_ZOOM.
+  const SEARCH_POINT_ZOOM    = 9;
+  const SEARCH_AREA_MAX_ZOOM = 10;
+  const PLACES_ROOT = 'data/places';
+  const PLACE_KIND  = { c: 'City', t: 'Town', v: 'Village', b: 'Borough', p: 'Community' };
+  // Section order is list order: what people most often type first.
+  const SECTIONS = ['States', 'Cities and towns', 'Counties', 'Watersheds', 'ZIP codes'];
+  const searchInput     = document.getElementById('search-input');
+  const btnSearchToggle = document.getElementById('btn-search-toggle');
+  const normalize = MCO.searchModel.normalize;
+
+  // Items carry an opaque id ("~" + kind + index) that no query can match,
+  // so the model ranks on labels and keywords alone; the record behind it
+  // (bbox or point, and the basin's level and geometry) is looked up here.
+  // _hay is the normalized text the pre-filter scans.
+  const _searchRecords = new Map();
+  let _searchSeq = 0;
+  function searchItem(section, label, meta, keywords, rec) {
+    const id = `~${section[0]}${_searchSeq++}`;
+    _searchRecords.set(id, { label, ...rec });
+    return { id, label, meta, keywords, section, queryOnly: true,
+             _hay: normalize([label, ...keywords].join('|')) };
+  }
+
+  // Each source is loaded once, on first use; when one arrives the open
+  // list refreshes. A failure is evicted (promiseCache), so the next
+  // keystroke retries.
+  const _searchItems = { States: [], 'Cities and towns': [], Counties: [], Watersheds: [], 'ZIP codes': [] };
+  function loadAreasAndPlaces() {
+    return _cache.cached('search:places', async () => {
+      const [areas, places] = await Promise.all([
+        MCO.fetchJSON(`${PLACES_ROOT}/areas.json`), MCO.fetchJSON(`${PLACES_ROOT}/places.json`)]);
+      const stateName = new Map(areas.filter(a => a[0] === 's').map(a => [a[2], a[1]]));
+      for (const [kind, name, st, w, s, e, n] of areas) {
+        const bbox = [[w, s], [e, n]];
+        if (kind === 's') _searchItems.States.push(searchItem('States', name, 'State', [st], { bbox }));
+        else _searchItems.Counties.push(searchItem('Counties', `${name}, ${st}`, 'County',
+          [`${name} ${st}`, `${name} ${stateName.get(st) || st}`], { bbox }));
+      }
+      _searchItems['Cities and towns'] = places.map(([name, st, kind, lat, lon]) =>
+        searchItem('Cities and towns', `${name}, ${st}`, PLACE_KIND[kind] || 'City',
+          [`${name} ${st}`, `${name} ${stateName.get(st) || st}`], { point: [lon, lat] }));
+      searchBox.refresh();
+    });
+  }
+  function loadZips() {
+    return _cache.cached('search:zips', async () => {
+      const zips = await MCO.fetchJSON(`${PLACES_ROOT}/zips.json`);
+      _searchItems['ZIP codes'] = zips.map(([zip, lat, lon]) =>
+        searchItem('ZIP codes', zip, 'ZIP code', [], { point: [lon, lat] }));
+      searchBox.refresh();
+    });
+  }
+  // Watersheds from the boundaries preloadFgb() already fetches, all four
+  // levels, each bbox walked from its geometry once.
+  function loadWatersheds() {
+    return _cache.cached('search:basins', async () => {
+      const levels = await Promise.all(HUC_LEVELS.map(loadFgb));
+      _searchItems.Watersheds = levels.flatMap((features, i) => features.map(f => {
+        const huc = String(f.properties.huc);
+        return searchItem('Watersheds', f.properties.name || `HUC${HUC_LEVELS[i]} ${huc}`,
+          `HUC${HUC_LEVELS[i]} · ${huc}`, [huc], { bbox: geomBounds(f.geometry), huc, geometry: f.geometry });
+      }));
+      searchBox.refresh();
+    });
+  }
+  function geomBounds(g) {
+    let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+    const walk = (c) => {
+      if (typeof c[0] === 'number') {
+        if (c[0] < w) w = c[0]; if (c[0] > e) e = c[0];
+        if (c[1] < s) s = c[1]; if (c[1] > n) n = c[1];
+      } else c.forEach(walk);
+    };
+    walk(g.coordinates);
+    return [[w, s], [e, n]];
+  }
+  function loadSearchSources(q) {
+    const fail = () => {};   // retried on the next keystroke
+    loadAreasAndPlaces().catch(fail);
+    loadWatersheds().catch(fail);
+    if (/^\d/.test(q)) loadZips().catch(fail);   // ZIPs only once a digit is typed
+  }
+
+  // The model scores every item it is given on every keystroke, with typo
+  // matching; ~70k items is too many for that. So it gets only the items
+  // whose text contains the query, plus, when that leaves almost nothing for
+  // a query of 4+ letters, every item with a word starting with its first
+  // letter, so a typo ("Bozemen") can still find its match.
+  function searchCandidates() {
+    const q = normalize(searchInput.value.trim());
+    if (!q) return [];
+    const all = SECTIONS.flatMap(s => _searchItems[s]);
+    const hits = all.filter(it => it._hay.includes(q));
+    if (hits.length >= 5 || q.length < 4 || /\d/.test(q)) return hits;
+    const initial = new RegExp(`(^|[^\\p{L}\\p{N}])${q[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'u');
+    return all.filter(it => initial.test(it._hay));
+  }
+
+  const searchBox = MCO.initSearchBox({
+    input: searchInput,
+    listbox: document.getElementById('search-list'),
+    items: searchCandidates,
+    onSelect: goToSearchResult,
+    label: 'Places and watersheds',
+    limit: 30,
+    sectionLimits: { States: 5, 'Cities and towns': 5, Counties: 5, Watersheds: 5, 'ZIP codes': 8 },
+  });
+  const searchCollapse = MCO.initSearchCollapse({
+    wrap: document.getElementById('search-wrap'),
+    toggle: btnSearchToggle,
+    input: searchInput,
+    onClose: () => searchBox.close(),
+  });
+  searchInput.addEventListener('focus', () => loadSearchSources(searchInput.value));
+  searchInput.addEventListener('input', () => loadSearchSources(searchInput.value));
+  // The kit handles (and stops) the Esc that closes the list or clears the
+  // text; the one it passes through closes the overlay, one step at a time.
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !e.defaultPrevented && searchCollapse.isOpen()) {
+      e.preventDefault();
+      searchCollapse.close();
+    }
+  });
+
+  function setSearchHit(feature) {
+    _searchHit = feature ? { type: 'FeatureCollection', features: [feature] } : EMPTY_FC;
+    map.getSource('search-hit')?.setData(_searchHit);
+  }
+
+  function goToSearchResult(id) {
+    const rec = _searchRecords.get(id);
+    if (!rec) return;
+    const animate = !MCO.reducedMotion();
+    // Focus stays in the field, unless the field is about to be hidden: the
+    // collapsed overlay hands it to its toggle, the rail drawer to its menu
+    // button, so it never drops to <body>.
+    if (rail.isRail()) rail.close();
+    else if (searchCollapse.isOpen()) searchCollapse.close();
+
+    if (rec.huc) {
+      const level = rec.huc.length;
+      if (currentView === 'zonal' && level !== currentHucLevel) setHucLevel(level);
+      setSearchHit({ type: 'Feature', properties: {}, geometry: rec.geometry });
+    } else if (rec.point) {
+      setSearchHit({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: rec.point } });
+    } else {
+      setSearchHit(null);
+    }
+    if (rec.bbox) map.fitBounds(rec.bbox, { ...FIT_OPTS, padding: 40, maxZoom: SEARCH_AREA_MAX_ZOOM, animate });
+    else map.easeTo({ center: rec.point, zoom: SEARCH_POINT_ZOOM, animate });
+    MCO.announce(`Zoomed to ${rec.label}`);
+  }
+
+  // / jumps to the search from anywhere but another field. Gated by
+  // ?kbd=off (WCAG 2.1.4).
+  window.addEventListener('keydown', (e) => {
+    if (!kbdShortcuts || e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    if (document.querySelector('dialog[open]')) return;
+    e.preventDefault();
+    if (rail.isRail()) { rail.open(searchInput); return; }
+    if (searchCollapse.isCollapsed()) { searchCollapse.open(); return; }
+    searchInput.focus();
+    searchInput.select();
   });
 
   // ── Info modal ────────────────────────────────────────────────────────────

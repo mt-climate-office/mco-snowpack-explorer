@@ -31,6 +31,16 @@ function painted() {
   }
   return n > 60;
 }
+// The search list is open over a typed query (for axe with the listbox
+// showing). Types once; true once the options have rendered.
+function searchListOpen() {
+  const i = document.getElementById('search-input');
+  if (i.value !== 'Gallatin') {
+    i.focus(); i.value = 'Gallatin';
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  return document.querySelectorAll('#search-list .mco-search-option').length > 3;
+}
 // The basin dialog is open and its plot has decoded.
 function plotShown() {
   const img = document.getElementById('basin-img');
@@ -49,6 +59,8 @@ export default {
     { name: 'zonal-flavor', query: '?date=2025-10-22&view=zonal&huc=4&flavor=ecdf', ready: painted },
     // Basin deep link: the dialog opens over the map on the HypsomeSWE plot.
     { name: 'basin-dialog', query: '?date=2025-10-22&view=zonal&huc=4&basin=1002&plot=hypsomeswe', ready: plotShown },
+    // Place search with its listbox open (the Gazetteer and the watersheds).
+    { name: 'search-list', query: '?date=2026-02-15', ready: searchListOpen },
   ],
   exemptTargets: '',
   allowProblems: [],
@@ -175,6 +187,80 @@ export default {
       const { page, close } = await open('?date=2025-09-01&view=zonal&huc=2&basin=03&plot=hypsomeswe', { ready: () => !document.getElementById('basin-empty').hidden, timeout: 45000 });
       const r = await page.evaluate(() => ({ text: document.getElementById('basin-empty').textContent, button: document.querySelector('#basin-empty button')?.textContent }));
       check('basin: a missing HypsomeSWE plot is explained, with Show the SWE plot', /No HypsomeSWE plot/.test(r.text) && r.button === 'Show the SWE plot', JSON.stringify(r));
+      await close();
+    }
+    // Place search: a point stops at zoom 9 so the region stays in view, an
+    // area fits its bounds no closer than 10, a watershed in the zonal view
+    // switches to its level, ZIP codes load only once a digit is typed, and
+    // focus stays in the field throughout.
+    {
+      const { page, close } = await open('?date=2026-02-15', { ready: painted, timeout: 45000 });
+      const zips = [];
+      page.on('request', r => { if (r.url().endsWith('/zips.json')) zips.push(r.url()); });
+      const pick = async (q) => {
+        const before = await search(page);
+        await page.fill('#search-input', '');
+        await page.focus('#search-input');
+        await page.keyboard.type(q, { delay: 15 });
+        await page.waitForFunction(() => document.querySelector('#search-list [aria-selected="true"]'), null, { timeout: 20000 }).catch(() => {});
+        await page.keyboard.press('Enter');
+        await page.waitForFunction((b) => location.search !== b, before, { timeout: 15000 }).catch(() => {});
+        await page.waitForTimeout(600);
+        const p = new URLSearchParams(await search(page));
+        return { lng: +p.get('lng'), lat: +p.get('lat'), zoom: +p.get('zoom'), huc: p.get('huc'),
+                 focus: await page.evaluate(() => document.activeElement.id) };
+      };
+      const city = await pick('Bozeman');
+      check('search: a city zooms to 9 at that point, focus stays in the field',
+        Math.abs(city.zoom - 9) < 0.01 && Math.abs(city.lng + 111.058) < 0.01 && Math.abs(city.lat - 45.684) < 0.01 && city.focus === 'search-input', JSON.stringify(city));
+      const county = await pick('Gallatin County, MT');
+      check('search: a county fits its bounds, no closer than zoom 10',
+        county.zoom <= 10 && county.zoom > 6 && Math.abs(county.lng + 111.29) < 0.5 && Math.abs(county.lat - 45.34) < 0.5, JSON.stringify(county));
+      check('search: ZIP codes not loaded before a digit is typed', zips.length === 0, String(zips.length));
+      const zip = await pick('59715');
+      check('search: a ZIP code loads its file and zooms to 9', zips.length === 1 && Math.abs(zip.zoom - 9) < 0.01, JSON.stringify({ ...zip, zips: zips.length }));
+      await close();
+    }
+    {
+      const { page, close } = await open('?date=2026-02-15&view=zonal&huc=4', { ready: painted, timeout: 45000 });
+      await page.focus('#search-input');
+      await page.keyboard.type('10020008', { delay: 15 });
+      await page.waitForFunction(() => /10020008/.test(document.querySelector('#search-list [aria-selected="true"]')?.textContent || ''), null, { timeout: 30000 }).catch(() => {});
+      await page.keyboard.press('Enter');
+      // The level is written at once, the camera on moveend.
+      await page.waitForFunction(() => !/huc=4/.test(location.search) && /zoom=/.test(location.search), null, { timeout: 15000 }).catch(() => {});
+      const r = await page.evaluate(() => ({ q: location.search, level: document.querySelector('#huc-btns input:checked').value }));
+      check('search: a HUC8 picked in the HUC4 view switches the level to HUC8', r.level === '8' && !/huc=/.test(r.q) && /zoom=/.test(r.q), JSON.stringify(r));
+      await close();
+    }
+    // / jumps to the search (not with ?kbd=off, WCAG 2.1.4). At phone width the
+    // field is an overlay: Esc closes the list and restores the text from
+    // before it opened (empty: typing opened it), then a second Esc closes
+    // the overlay with focus back on its toggle.
+    {
+      const { page, close } = await open('?date=2026-02-15', { ready: painted, timeout: 45000 });
+      await page.focus('#main'); await page.keyboard.press('/');
+      const on = await page.evaluate(() => document.activeElement.id);
+      await close();
+      const off = await open('?date=2026-02-15&kbd=off', { ready: painted, timeout: 45000 });
+      await off.page.focus('#main'); await off.page.keyboard.press('/');
+      const offFocus = await off.page.evaluate(() => ({ focus: document.activeElement.id, q: location.search }));
+      await off.close();
+      check('search: / focuses the field; ?kbd=off turns it off and stays in the URL',
+        on === 'search-input' && offFocus.focus !== 'search-input' && /kbd=off/.test(offFocus.q), JSON.stringify({ on, off: offFocus }));
+    }
+    {
+      const { page, close } = await open('?date=2026-02-15',
+        { viewport: { name: '375x812', width: 375, height: 812, touch: true }, ready: painted, timeout: 45000 });
+      await page.focus('#btn-search-toggle'); await page.keyboard.press('Enter'); await page.waitForTimeout(300);
+      await page.keyboard.type('Bozeman', { delay: 15 });
+      await page.waitForFunction(() => !document.getElementById('search-list').hidden, null, { timeout: 20000 }).catch(() => {});
+      const s = () => page.evaluate(() => ({ list: !document.getElementById('search-list').hidden, text: document.getElementById('search-input').value,
+        overlay: document.getElementById('search-wrap').classList.contains('is-open'), focus: document.activeElement.id }));
+      await page.keyboard.press('Escape'); const e1 = await s();
+      await page.keyboard.press('Escape'); await page.waitForTimeout(200); const e2 = await s();
+      check('search (phone): Esc closes the list, a second Esc closes the overlay to its toggle',
+        !e1.list && e1.overlay && e1.focus === 'search-input' && !e2.overlay && e2.focus === 'btn-search-toggle', JSON.stringify({ e1, e2 }));
       await close();
     }
     // ?export=light downloads the branded PNG headlessly. It fires as soon as

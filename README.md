@@ -62,6 +62,7 @@ are left out of the URL.
 | `lng`, `lat`, `zoom` | the camera | the lower 48 |
 | `theme` | `dark`, `light`, `high-contrast` | the system setting |
 | `export` | `light`, `dark` (`true` also works): download the map as a PNG on load | none |
+| `kbd` | `off`: turn off the `/` shortcut to the search box | on |
 
 An old `?method=zig` or `?method=ecdf` link still opens on that flavor.
 
@@ -74,6 +75,12 @@ An old `?method=zig` or `?method=ecdf` link still opens on that flavor.
 - `data/snodas-domain.geojson`: the edge of the SNODAS grid, traced from its
   NoData mask (NOHRSC publishes no boundary file), outlined in the gridded
   view. `scripts/build-domain.sh` rebuilds it.
+- `data/places/`: what the search box finds besides watersheds. `areas.json`
+  (states and counties, with their bounding boxes), `places.json` (cities,
+  towns and Census-designated places) and `zips.json` (ZIP code areas), each
+  as compact arrays, lower 48 and DC only. Built from the US Census 2026
+  Gazetteer and 2025 cartographic boundaries (public domain) by
+  `scripts/build-places.sh`. Watersheds come from the boundary files above.
 - `verify.config.mjs`: scenarios and probes for the house verify harness.
 
 The look, the controls and most behaviour come from the Montana Climate

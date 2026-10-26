@@ -185,13 +185,32 @@
 
     /* Narrow-screen fallback for the segmented groups (HOUSE-STYLE §3; the
        photo explorer's pattern). MCO.initSegmentedFallback puts [hidden] on
-       whichever of the fieldset / <select> is not in use (≤1400px → the
+       whichever of the fieldset / <select> is not in use (≤1700px → the
        select); each wrapper with its label follows the attribute. Keyed on the
        attribute, not on a media query of its own, so the kit flips both in one
        tick and can move focus across. #huc-group is [hidden] outright in the
        gridded view. */
     .seg-group:has(> .seg-btns[hidden]),
     .select-group:has(> select[hidden]) { display: none; }
+
+    /* ── Search (kit: .mco-search + MCO.initSearchBox) ─────────────────────
+       Field, icon, listbox and the ≤640px collapse are the kit's. App-owned:
+       the "/" hint, the cancel-glyph filter, and one tagged width. Do NOT add
+       a #btn-search-toggle rule: an ID selector outbids the kit's class and
+       would strand the toggle hidden. */
+    /* kit-override: 190px, not the kit's 220px. With the zonal view's three
+       segmented groups this bar is already short of room above 1060px. */
+    .mco-search .mco-search-input { width: 190px; padding-right: 30px; }
+    #search-input::-webkit-search-cancel-button { filter: var(--ctrl-icon-filter, none); }
+    .search-kbd {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      font: 600 0.62rem var(--font-mono);
+      background: var(--border-glass); border: 1px solid var(--border);
+      border-radius: 3px; padding: 1px 5px; color: var(--text-muted);
+      pointer-events: none; transition: opacity 0.15s;
+    }
+    /* The / hint goes once the field has focus. */
+    #search-wrap:focus-within .search-kbd { opacity: 0; }
 
     .info-icon { display: inline-flex; align-items: center; vertical-align: middle; margin: 0 3px 1px 0; opacity: 0.8; }
     .info-icon svg { stroke: currentColor; }
@@ -266,8 +285,9 @@
     .basin-data .band-scroll { max-height: 40dvh; overflow-y: auto; }
 
     /* ── Responsive ────────────────────────────────────────────────────────── */
-    /* Breakpoints 1400 (labels, segmented → select) / 1060 (chrome) / 750
-       (brand lockup) are the kit's ladder. With the zonal view's three groups
+    /* Breakpoints 1400 (labels) / 1060 (chrome) / 750 (brand lockup) are the
+       kit's ladder; segmented → select is this app's own 1700 (app.js SEG_MQ),
+       where the zonal bar with search stops fitting as buttons. With the zonal view's three groups
        (view, HUC level, normals) the one-row bar needs ~1150px even with the
        labels shed, so below 1060 the bar may wrap: the controls get their own
        full-width row and the buttons lift up beside the brand (the photo
@@ -303,6 +323,9 @@
       /* kit-override: the drawer's steppers sit side by side. */
       .mco-nav-drawer .date-step-btns { flex-direction: row; gap: 4px; }
       .mco-nav-drawer select.nav-select { width: 100%; }
+      /* kit-override: the search list stays inside the short viewport. */
+      .mco-nav-drawer .mco-search-list { max-height: 50dvh; }
+      .mco-nav-drawer .search-kbd { display: none; }
       /* kit-override: the drawer's buttons in a two-column grid. */
       .mco-nav-drawer .nav-meta {
         order: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
@@ -374,6 +397,16 @@
   </div>
 
   <div class="controls">
+    <!-- Place search (kit .mco-search + MCO.initSearchBox, which wires the
+         combobox/listbox roles and aria-*). Press / anywhere to jump here. -->
+    <div class="mco-search mco-search-collapse" id="search-wrap">
+      <span class="mco-search-icon" aria-hidden="true"></span>
+      <label for="search-input" class="sr-only">Search places and watersheds</label>
+      <input type="search" id="search-input" class="mco-search-input" placeholder="Place, basin or ZIP">
+      <kbd class="search-kbd" aria-hidden="true">/</kbd>
+      <div class="mco-search-list" id="search-list" hidden></div>
+    </div>
+
     <div class="control-group">
       <label class="control-label" for="date-input">Date</label>
       <div class="date-stepper">
@@ -396,7 +429,7 @@
     </div>
 
     <!-- Single choices are radio fieldsets (one Tab stop, arrow keys —
-         HOUSE-STYLE §3). Each has a <select> twin that takes over at ≤1400px
+         HOUSE-STYLE §3). Each has a <select> twin that takes over at ≤1700px
          (MCO.initSegmentedFallback). The visible label is aria-hidden on the
          fieldset side because the legend already names the group. -->
     <div class="control-group seg-group">
@@ -459,6 +492,16 @@
   </div>
 
   <div class="nav-meta">
+    <!-- ≤640px: the search field above collapses; this button is its
+         disclosure, which expands it as an overlay bar under the navbar. Hidden
+         at wider widths, where the field itself is in .controls. -->
+    <button type="button" class="nav-btn icon-only mco-search-toggle" id="btn-search-toggle"
+            aria-expanded="false" aria-controls="search-wrap" aria-label="Search places and watersheds">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+    </button>
     <button type="button" class="nav-btn" id="btn-share" aria-label="Copy shareable link">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -586,6 +629,9 @@
     <div class="info-section">
       <h3>Using the explorer</h3>
       <ul>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><strong>Search</strong>. Type a state, county, watershed, city or ZIP code
+            to go there. Press <kbd>/</kbd> to jump to the search box (add <code>?kbd=off</code> to the address to turn
+            that key off). A city or ZIP code is marked with a dot, and a watershed is outlined.</li>
         <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg></span><strong>Date</strong>. Pick a day, or step one day at a time with ▲ and ▼.</li>
         <li><strong>View</strong>. Gridded shows every 1&thinsp;km cell. Zonal averages over watersheds, from
             the smallest (HUC8 subbasins, the default) to the largest (HUC2 regions); choose the size with Level.</li>
