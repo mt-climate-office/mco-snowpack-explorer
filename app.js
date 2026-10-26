@@ -547,6 +547,14 @@
       }, 'huc-fill');
     }
 
+    // The basemap's lakes and rivers sit under its land in the style, so the
+    // raster and the HUC fills would bury them. Lift them over the data and
+    // the hillshade, under every outline, as on the mesonet explorer's map.
+    // Both CARTO styles name them so; the kit's blank fallback has neither.
+    for (const id of ['water', 'waterway']) {
+      if (map.getLayer(id)) map.moveLayer(id, 'huc-line');
+    }
+
     // Restore visibility for current view
     setGriddedVisible(currentView === 'gridded');
     const zonalVis = currentView === 'zonal' ? 'visible' : 'none';
