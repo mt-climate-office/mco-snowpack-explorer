@@ -165,9 +165,10 @@
   if (currentDate < SNODAS_START) currentDate = SNODAS_START;
   if (currentDate > latestDate)   currentDate = latestDate;
 
-  // The basin dialog's state: which watershed is open (null when closed) and
-  // which of its two plots shows. ?basin= opens it on load; ?plot= is only
-  // written while it is open.
+  // The basin dialog's state: which watershed is open (null when closed),
+  // which of its two plots shows, and which snow year's animation plays in
+  // its place (null for the plot). ?basin= opens it on load; ?plot= and
+  // ?anim= are only written while it is open.
   const PLOT_TYPES   = { swe: 'SWE', hypsomeswe: 'HypsomeSWE' };
   const DEFAULT_PLOT = 'swe';
   const isHuc = (s) => /^\d+$/.test(s || '') && HUC_LEVELS.includes(String(s).length);
@@ -176,6 +177,9 @@
   let _focusedHuc  = null;   // the table twin's keyboard focus, shown on the map
   let currentPlot  = PLOT_TYPES[getLower('plot')] ? getLower('plot') : DEFAULT_PLOT;
   const askedBasin = isHuc(urlParams.get('basin')) ? urlParams.get('basin') : null;
+  const isSnowYear = (s) => /^\d{4}$/.test(s || '');
+  let currentAnim  = askedBasin && isSnowYear(urlParams.get('anim')) ? +urlParams.get('anim') : null;
+  if (currentAnim) currentPlot = 'hypsomeswe';
 
   // ?kbd=off turns off the single-character shortcut (/ for search), the
   // opt-out WCAG 2.1.4 asks for. Carried in every URL write.
@@ -240,6 +244,7 @@
     if (currentBasin) {
       params.basin = currentBasin.huc;
       if (currentPlot !== DEFAULT_PLOT) params.plot = currentPlot;
+      if (currentAnim) params.anim = currentAnim;
     }
     const theme = MCO.getTheme();
     if (theme !== MCO.osTheme()) params.theme = theme;
@@ -672,6 +677,7 @@
     loading.done();
 
     currentDate = d;
+    currentAnim = null;   // the animation has no date; picking one asks for its plot
     dateInput.value = currentDate;
     if (!silent) writeUrl();
     CogProtocol.preload(cogUrl(currentDate));
@@ -969,6 +975,8 @@
     if (VIEWS.includes(v)) setView(v, { silent: true });
     const t = (params.get('plot') || DEFAULT_PLOT).toLowerCase();
     if (PLOT_TYPES[t]) setPlotType(t, { silent: true });
+    const a = params.get('anim');
+    setAnim(isSnowYear(a) ? +a : null, { silent: true });
     const basin = params.get('basin');
     if (isHuc(basin) && (!basinModal.open || currentBasin?.huc !== basin)) openBasin(basin, { push: false });
   });
@@ -1101,6 +1109,10 @@
   const basinDate     = document.getElementById('basin-date');
   const basinFlavorFs = document.getElementById('basin-flavor-btns');
   const basinPlotFs   = document.getElementById('basin-plot-btns');
+  const basinAnimGrp  = document.getElementById('basin-anim-group');
+  const basinSy       = document.getElementById('basin-sy');
+  const basinAnimBtn  = document.getElementById('btn-basin-anim');
+  const basinVideo    = document.getElementById('basin-video');
   const basinFrame    = document.getElementById('basin-frame');
   const basinImg      = document.getElementById('basin-img');
   const basinEmpty    = document.getElementById('basin-empty');
@@ -1128,15 +1140,146 @@
     basinDate.value = currentDate;
     checkRadio(basinFlavorFs, currentFlavor);
     checkRadio(basinPlotFs, currentPlot);
+    syncAnimControls();
   }
 
+  // A plot type is a plot, so choosing one (SWE is the only change the
+  // radios can make while the HypsomeSWE animation shows) ends the animation.
   function setPlotType(t, { silent = false } = {}) {
     if (!PLOT_TYPES[t] || t === currentPlot) return;
     currentPlot = t;
+    currentAnim = null;
     checkRadio(basinPlotFs, t);
+    syncAnimControls();
     if (!currentBasin) return;
     if (!silent) { writeUrl(); MCO.announce(`${PLOT_TYPES[t]} plot`); }
     renderBasin();
+  }
+
+  // ── Snow-year animations ──
+  // Every day's HypsomeSWE plot for one snow year (1 September – 31 August,
+  // named for the year it ends) as one MP4 per flavor and HUC, which
+  // mco-snodas publishes at animations/sy{year}/{flavor}/hypsomeswe/usdm/
+  // {huc}.mp4. Which years exist comes from one listing of animations/; the
+  // control appears once it has, and starts on the newest snow year that
+  // has ended by the latest date with data. The year runs in the select only
+  // when there is more than one to choose.
+  const ANIM_ROOT = `${DATA_HOST}/snodas/animations`;
+  const animUrl = (sy, flavor, huc) => `${ANIM_ROOT}/sy${sy}/${flavor}/hypsomeswe/${PLOT_STYLE}/${huc}.mp4`;
+  const snowYearSpan = (sy) => `${MCO.formatDateStr(`${sy - 1}-09-01`)} – ${MCO.formatDateStr(`${sy}-08-31`)}`;
+  function animYears() {
+    return _cache.cached('anim:years', async () => {
+      const years = (await s3Prefixes('animations/'))
+        .map(p => /^animations\/sy(\d{4})\/$/.exec(p)?.[1]).filter(Boolean).map(Number);
+      return years.sort((a, b) => a - b);
+    }).catch(() => []);
+  }
+  animYears().then((years) => {
+    if (!years.length) return;
+    const ended = years.filter(y => `${y}-08-31` <= latestDate);
+    const dflt = ended.length ? ended[ended.length - 1] : years[years.length - 1];
+    basinSy.replaceChildren(...years.slice().reverse().map(y => h('option', { value: String(y), textContent: String(y) })));
+    basinSy.value = String(currentAnim && years.includes(currentAnim) ? currentAnim : dflt);
+    basinSy.hidden = years.length < 2;
+    basinAnimGrp.hidden = false;
+    syncAnimControls();
+  });
+  function syncAnimControls() {
+    if (currentAnim && basinSy.querySelector(`option[value="${currentAnim}"]`)) basinSy.value = String(currentAnim);
+    basinAnimBtn.textContent = basinSy.hidden ? `Animate snow year ${basinSy.value}` : 'Animate snow year';
+    basinAnimBtn.setAttribute('aria-pressed', String(!!currentAnim));
+  }
+  basinAnimBtn.addEventListener('click', () => setAnim(currentAnim ? null : +basinSy.value));
+  // Choosing a year switches a running animation; otherwise it waits for the button.
+  basinSy.addEventListener('change', () => { if (currentAnim) setAnim(+basinSy.value); else syncAnimControls(); });
+
+  // The animations are HypsomeSWE only, so one starting moves the Plot
+  // radios there; null goes back to the plot for the page's date.
+  function setAnim(sy, { silent = false } = {}) {
+    if (sy === currentAnim) return;
+    currentAnim = sy;
+    if (sy) currentPlot = 'hypsomeswe';
+    syncBasinControls();
+    if (!currentBasin) return;
+    if (!silent) {
+      writeUrl();
+      MCO.announce(sy ? `Snow year ${sy} animation` : `${PLOT_TYPES[currentPlot]} plot`);
+    }
+    renderBasin();
+  }
+
+  function stopVideo() {
+    if (basinVideo.hidden && !basinVideo.getAttribute('src')) return;
+    basinVideo.pause();
+    basinVideo.removeAttribute('src');
+    basinVideo.load();   // drops the old stream rather than leaving it buffered
+    basinVideo.hidden = true;
+  }
+
+  // Whether an animation exists, asked with a HEAD: a <video> reports a 404
+  // and a codec it can't decode as the same error, and the two need
+  // different messages.
+  function animExists(url) {
+    return _cache.cached(`anim:${url}`, async () => (await fetch(url, { method: 'HEAD' })).ok).catch(() => false);
+  }
+
+  // Resolves true once the first frame has decoded, false on an error.
+  function loadVideo(url) {
+    return new Promise((resolve) => {
+      const done = (ok) => {
+        basinVideo.removeEventListener('loadeddata', onOk);
+        basinVideo.removeEventListener('error', onErr);
+        resolve(ok);
+      };
+      const onOk = () => done(true), onErr = () => done(false);
+      basinVideo.addEventListener('loadeddata', onOk);
+      basinVideo.addEventListener('error', onErr);
+      basinVideo.preload = 'auto';
+      basinVideo.src = url;
+    });
+  }
+
+  async function renderAnim(seq) {
+    const { huc, name, level } = currentBasin;
+    const sy = currentAnim, flavor = currentFlavor;
+    const url = animUrl(sy, flavor, huc);
+    // The animation's frames are the daily plots, so their data tables are
+    // its text alternative, one date at a time.
+    basinTable.replaceChildren(h('p', { textContent:
+      `The animation shows the HypsomeSWE plot for each day of snow year ${sy}, one day per frame. `
+      + 'For the numbers behind any day, choose that date: its plot has a table of every elevation band.' }));
+
+    if (!(await animExists(url))) {
+      if (seq !== _basinSeq) return;
+      basinFrame.removeAttribute('aria-busy');
+      showBasinEmpty(`There's no snow year ${sy} animation for ${name} against ${flavorName(flavor).toLowerCase()}.`,
+        { label: 'Show the SWE plot', onClick: () => setPlotType('swe'), focus: basinPlotFs.querySelector('input[value="swe"]') });
+      return;
+    }
+    if (seq !== _basinSeq) return;
+    if (basinVideo.getAttribute('src') !== url) {
+      const ok = await loadVideo(url);
+      if (seq !== _basinSeq) return;
+      if (!ok) {
+        basinFrame.removeAttribute('aria-busy');
+        // The files are H.265 (HEVC): Safari plays them, Chrome and Edge on
+        // most hardware, Firefox mostly not. The download still works.
+        showBasinEmpty(`This browser can't play the snow year ${sy} animation for ${name}. Download it to watch it in a video player.`,
+          { label: 'Show the plot', onClick: () => setAnim(null), focus: basinAnimBtn });
+        basinCaption.replaceChildren(h('a', { href: url, download: '', textContent: 'Download the animation (MP4)' }), '.');
+        return;
+      }
+    }
+    basinFrame.removeAttribute('aria-busy');
+    basinImg.hidden = true;
+    basinEmpty.hidden = true;
+    basinVideo.setAttribute('aria-label', `Animation of the daily HypsomeSWE plots for ${name} (HUC${level} ${huc}) through snow year ${sy}, against ${flavorName(flavor).toLowerCase()}.`);
+    basinVideo.hidden = false;
+    // Started by the visitor's own press, and never under reduced motion;
+    // the native controls pause it either way (WCAG 2.2.2).
+    if (!MCO.reducedMotion() && basinVideo.paused) basinVideo.play().catch(() => {});
+    basinCaption.replaceChildren(`HypsomeSWE · snow year ${sy}, ${snowYearSpan(sy)} · ${flavorName(flavor)}. `,
+      h('a', { href: url, target: '_blank', rel: 'noopener', textContent: 'Open the full-size animation' }), '.');
   }
 
   // ── Selection and keyboard focus on the map ──
@@ -1179,7 +1322,10 @@
   let _closingFromHistory = false, _backFromClose = false;
   basinModal.addEventListener('close', () => {
     currentBasin = null;
+    currentAnim = null;
     _basinSeq++;
+    stopVideo();
+    syncAnimControls();
     setSelected(null);
     refreshTwinSelection();
     if (_closingFromHistory) _closingFromHistory = false;
@@ -1199,25 +1345,27 @@
   function plotIndex(d) {
     return _cache.cached(`plots:${d}`, () => MCO.fetchJSON(`${PLOTS_ROOT}/${d}/index.json`).catch(() => null));
   }
+  // The "folders" one level under prefix, from the bucket's anonymous
+  // listing, every page of it.
+  async function s3Prefixes(prefix) {
+    const out = [];
+    let token = null;
+    do {
+      const q = new URLSearchParams({ 'list-type': '2', prefix, delimiter: '/' });
+      if (token) q.set('continuation-token', token);
+      const res = await fetch(`${DATA_HOST}/snodas/?${q}`);
+      if (!res.ok) throw new Error(`listing of ${prefix} failed: ${res.status}`);
+      const xml = new DOMParser().parseFromString(await res.text(), 'application/xml');
+      for (const el of xml.getElementsByTagName('Prefix')) out.push(el.textContent);
+      token = xml.getElementsByTagName('IsTruncated')[0]?.textContent === 'true'
+        ? xml.getElementsByTagName('NextContinuationToken')[0]?.textContent : null;
+    } while (token);
+    return out;
+  }
   function plotDates() {
-    return _cache.cached('plots:dates', async () => {
-      const dates = [];
-      let token = null;
-      do {
-        const q = new URLSearchParams({ 'list-type': '2', prefix: 'plots/', delimiter: '/' });
-        if (token) q.set('continuation-token', token);
-        const res = await fetch(`${DATA_HOST}/snodas/?${q}`);
-        if (!res.ok) throw new Error(`plot listing failed: ${res.status}`);
-        const xml = new DOMParser().parseFromString(await res.text(), 'application/xml');
-        for (const el of xml.getElementsByTagName('Prefix')) {
-          const m = /^plots\/(\d{4}-\d{2}-\d{2})\/$/.exec(el.textContent);
-          if (m) dates.push(m[1]);
-        }
-        token = xml.getElementsByTagName('IsTruncated')[0]?.textContent === 'true'
-          ? xml.getElementsByTagName('NextContinuationToken')[0]?.textContent : null;
-      } while (token);
-      return dates.sort();
-    }).catch(() => []);
+    return _cache.cached('plots:dates', async () => (await s3Prefixes('plots/'))
+      .map(p => /^plots\/(\d{4}-\d{2}-\d{2})\/$/.exec(p)?.[1]).filter(Boolean).sort()
+    ).catch(() => []);
   }
   // The closest date to d whose plots are complete (its index.json exists).
   async function nearestPlotDate(d) {
@@ -1334,11 +1482,12 @@
     ]));
   }
   basinData.addEventListener('toggle', () => {
-    if (basinData.open && currentBasin && currentPlot === 'hypsomeswe') renderBandTable(_basinSeq);
+    if (basinData.open && currentBasin && currentPlot === 'hypsomeswe' && !currentAnim) renderBandTable(_basinSeq);
   });
 
   function showBasinEmpty(text, action) {
     basinImg.hidden = true;
+    stopVideo();
     basinCaption.textContent = '';
     const kids = [h('p', { textContent: text })];
     // The button disappears with the message it answers, so its action says
@@ -1363,6 +1512,7 @@
     basinTitle.textContent = name;
     basinSubtitle.textContent = `HUC${level} · ${huc}`;
     basinFrame.setAttribute('aria-busy', 'true');
+    if (currentAnim) { renderAnim(seq); return; }
 
     const [idx, zonal] = await Promise.all([plotIndex(date), loadZonal(date, flavor).catch(() => null)]);
     if (seq !== _basinSeq) return;
@@ -1394,6 +1544,7 @@
       return;
     }
     basinEmpty.hidden = true;
+    stopVideo();
     basinImg.alt = plotAlt(row, date);
     basinImg.src = url;
     basinImg.hidden = false;
