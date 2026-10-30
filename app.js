@@ -1214,7 +1214,63 @@
     basinVideo.removeAttribute('src');
     basinVideo.load();   // drops the old stream rather than leaving it buffered
     basinVideo.hidden = true;
+    basinFrames.hidden = true;
+    _shownFrame = -1;
   }
+
+  // ── Stepping the animation a day at a time ──
+  // Frame i is day i of the snow year (1 September first), at 12 frames a
+  // second (animations/README.md). A step pauses and seeks to the middle of
+  // its frame, clear of the rounding at either edge.
+  const ANIM_FPS = 12;
+  const basinFrames    = document.getElementById('basin-frames');
+  const basinFrameDate = document.getElementById('basin-frame-date');
+  let _shownFrame = -1;
+  const frameCount = () => (Number.isFinite(basinVideo.duration) ? Math.round(basinVideo.duration * ANIM_FPS) : 0);
+  const frameAt    = () => Math.min(frameCount() - 1, Math.floor(basinVideo.currentTime * ANIM_FPS));
+  const frameDate  = (i) => MCO.shiftDate(`${currentAnim - 1}-09-01`, i);
+  const canStepFrame = (d) => {
+    if (!currentAnim || basinVideo.hidden || !frameCount()) return false;
+    const i = frameAt();
+    return d < 0 ? i > 0 : i < frameCount() - 1;
+  };
+  function showFrame() {
+    if (!currentAnim || !frameCount()) return;
+    const i = frameAt();
+    if (i === _shownFrame) return;
+    _shownFrame = i;
+    basinFrameDate.textContent = `${MCO.formatDateStr(frameDate(i))} · day ${i + 1} of ${frameCount()}`;
+    frameStepper.refresh();
+  }
+  function stepFrame(d) {
+    const i = frameAt() + d;
+    basinVideo.pause();
+    basinVideo.currentTime = (i + 0.5) / ANIM_FPS;
+    showFrame();
+    MCO.announce(MCO.formatDateStr(frameDate(i)));
+  }
+  const frameStepper = MCO.initStepper({
+    prev: document.getElementById('btn-frame-prev'), next: document.getElementById('btn-frame-next'),
+    onStep: stepFrame, canStep: canStepFrame,
+  });
+  // timeupdate fires only a few times a second; where the browser can say
+  // when each frame is painted, the date follows every one during playback.
+  const onVideoFrame = () => { showFrame(); if (!basinVideo.paused) basinVideo.requestVideoFrameCallback?.(onVideoFrame); };
+  basinVideo.addEventListener('play', () => basinVideo.requestVideoFrameCallback?.(onVideoFrame));
+  for (const ev of ['loadedmetadata', 'timeupdate', 'seeked', 'pause']) basinVideo.addEventListener(ev, showFrame);
+  // ← / → step a day from anywhere in the dialog but a field or radio,
+  // whose arrows are their own. Capture, so the native controls of a
+  // focused <video> don't also seek it by seconds.
+  basinModal.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || basinVideo.hidden) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const d = e.key === 'ArrowLeft' ? -1 : 1;
+    if (canStepFrame(d)) { stepFrame(d); frameStepper.refresh(); }
+  }, true);
 
   // Whether an animation exists, asked with a HEAD: a <video> reports a 404
   // and a codec it can't decode as the same error, and the two need
@@ -1247,6 +1303,7 @@
     // its text alternative, one date at a time.
     basinTable.replaceChildren(h('p', { textContent:
       `The animation shows the HypsomeSWE plot for each day of snow year ${sy}, one day per frame. `
+      + 'Step through it a day at a time with the buttons under it or the left and right arrow keys. '
       + 'For the numbers behind any day, choose that date: its plot has a table of every elevation band.' }));
 
     if (!(await animExists(url))) {
@@ -1275,6 +1332,9 @@
     basinEmpty.hidden = true;
     basinVideo.setAttribute('aria-label', `Animation of the daily HypsomeSWE plots for ${name} (HUC${level} ${huc}) through snow year ${sy}, against ${flavorName(flavor).toLowerCase()}.`);
     basinVideo.hidden = false;
+    basinFrames.hidden = false;
+    _shownFrame = -1;
+    showFrame();
     // Started by the visitor's own press, and never under reduced motion;
     // the native controls pause it either way (WCAG 2.2.2).
     if (!MCO.reducedMotion() && basinVideo.paused) basinVideo.play().catch(() => {});
