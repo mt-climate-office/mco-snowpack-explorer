@@ -186,7 +186,7 @@
 
     /* Narrow-screen fallback for the segmented groups (HOUSE-STYLE §3; the
        photo explorer's pattern). MCO.initSegmentedFallback puts [hidden] on
-       whichever of the fieldset / <select> is not in use (≤1700px → the
+       whichever of the fieldset / <select> is not in use (≤1760px → the
        select); each wrapper with its label follows the attribute. Keyed on the
        attribute, not on a media query of its own, so the kit flips both in one
        tick and can move focus across. #huc-group is [hidden] outright in the
@@ -302,7 +302,7 @@
 
     /* ── Responsive ────────────────────────────────────────────────────────── */
     /* Breakpoints 1400 (labels) / 1060 (chrome) / 750 (brand lockup) are the
-       kit's ladder; segmented → select is this app's own 1700 (app.js SEG_MQ),
+       kit's ladder; segmented → select is this app's own 1760 (app.js SEG_MQ),
        where the zonal bar with search stops fitting as buttons. With the zonal view's three groups
        (view, HUC level, normals) the one-row bar needs ~1150px even with the
        labels shed, so below 1060 the bar may wrap: the controls get their own
@@ -445,7 +445,7 @@
     </div>
 
     <!-- Single choices are radio fieldsets (one Tab stop, arrow keys —
-         HOUSE-STYLE §3). Each has a <select> twin that takes over at ≤1700px
+         HOUSE-STYLE §3). Each has a <select> twin that takes over at ≤1760px
          (MCO.initSegmentedFallback). The visible label is aria-hidden on the
          fieldset side because the legend already names the group. -->
     <div class="control-group seg-group">
@@ -517,6 +517,17 @@
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
+    </button>
+    <!-- A map layer toggle among the bar's buttons, as mesonet-photo-explorer's
+         Boundaries: the kit's .nav-btn[aria-pressed], with an icon and a
+         .btn-label like Share and Export, which the kit sheds to the icon on
+         narrow screens. -->
+    <button type="button" class="nav-btn" id="btn-snotel" aria-pressed="false" aria-label="SNOTEL stations">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+      </svg>
+      <span class="btn-label">SNOTEL</span>
     </button>
     <button type="button" class="nav-btn" id="btn-share" aria-label="Copy shareable link">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"
@@ -602,6 +613,67 @@
      click-to-pin reading writes to, and the table twin. -->
 <div id="tooltip" class="mco-tooltip" aria-hidden="true"></div>
 
+<!-- One SNOTEL station's SWE plot: the basin dialog's frame and classes,
+     with one plot type (a station has no elevation bands) and no animation. -->
+<dialog id="station-modal" class="mco-modal" aria-labelledby="station-title">
+  <div class="info-modal-box basin-box">
+    <div class="info-modal-header">
+      <div>
+        <h2 class="info-modal-title" id="station-title">SNOTEL station</h2>
+        <p class="info-modal-subtitle" id="station-subtitle"></p>
+      </div>
+      <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
+    </div>
+
+    <div class="basin-controls">
+      <div class="control-group">
+        <label class="control-label" for="station-date">Date</label>
+        <div class="date-stepper">
+          <input type="date" id="station-date">
+          <div class="date-step-btns">
+            <button type="button" class="nav-btn mco-step date-step" id="btn-station-prev" aria-label="Previous day">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            <button type="button" class="nav-btn mco-step date-step" id="btn-station-next" aria-label="Next day">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="18 15 12 9 6 15"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="control-label" aria-hidden="true">Normals</span>
+        <fieldset class="seg-btns is-radio" id="station-flavor-btns">
+          <legend class="sr-only">Normals</legend>
+          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="zig_smooth" checked>Smoothed</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="zig">Fitted</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="ecdf">Empirical</label>
+        </fieldset>
+      </div>
+    </div>
+
+    <figure class="basin-figure">
+      <div class="basin-frame" id="station-frame">
+        <!-- 1×1 transparent placeholder: src="" would re-request the page. -->
+        <img id="station-img" alt="" width="1500" height="1000"
+             src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
+        <div class="mco-empty" id="station-empty" hidden></div>
+      </div>
+      <figcaption class="basin-caption" id="station-caption"></figcaption>
+    </figure>
+
+    <details class="basin-data">
+      <summary>Data for this plot</summary>
+      <div id="station-table"></div>
+    </details>
+  </div>
+</dialog>
+
 <dialog id="info-modal" class="mco-modal" aria-labelledby="info-modal-title">
   <div class="info-modal-box">
     <div class="info-modal-header">
@@ -649,6 +721,12 @@
             to go there. Press <kbd>/</kbd> to jump to the search box (add <code>?kbd=off</code> to the address to turn
             that key off). A city or ZIP code is marked with a dot, and a watershed is outlined, as is a ski area
             where OpenStreetMap maps its boundary.</li>
+        <li><strong>SNOTEL stations</strong>. Turn them on with <strong>SNOTEL</strong> in the bar at the top. Each NRCS SNOTEL station is colored by
+            its own SWE percentile for the date, against the same normals and reference years as the map, in the
+            same colors. A smaller grey dot has no reading for the date.
+            A station's reading is the one at midnight as the date begins, the moment SNODAS maps. NRCS dates that
+            reading the day before (the end of that day), and so do the station plots. Click or tap a station for its SWE plot; with a
+            keyboard, the stations in view are a table after the map.</li>
         <li><strong>Ski runs</strong>. Zoom in on a ski area to see its name, downhill runs and lifts. Closer in, each run
             carries its trail sign: a green circle, blue square, black diamond or double black diamond, from easiest to
             experts only.
@@ -704,6 +782,8 @@
       <h3>Data</h3>
       <p>Snow: <a href="https://nsidc.org/data/g02158" target="_blank" rel="noopener">NOAA SNODAS</a>.
          Watersheds: <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset" target="_blank" rel="noopener">USGS Watershed Boundary Dataset</a>.
+         Stations: <a href="https://www.nrcs.usda.gov/resources/data-and-reports/snow-and-climate-monitoring-snotel" target="_blank" rel="noopener">USDA NRCS SNOTEL</a>,
+         with normals and plots by the Montana Climate Office.
          Ski areas, runs and lifts: <a href="https://openskimap.org" target="_blank" rel="noopener">OpenSkiMap</a>,
          from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>
          (Open Database License).

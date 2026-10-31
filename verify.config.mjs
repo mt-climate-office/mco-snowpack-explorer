@@ -47,6 +47,12 @@ function plotShown() {
   return document.getElementById('basin-modal').open && !img.hidden && img.complete && img.naturalWidth > 100;
 }
 
+// A SNOTEL station's dialog is open and its plot has decoded.
+function stationShown() {
+  const img = document.getElementById('station-img');
+  return document.getElementById('station-modal').open && !img.hidden && img.complete && img.naturalWidth > 100;
+}
+
 export default {
   root: '.', page: 'index.html',
   // The first-visit intro modal would otherwise open over every load.
@@ -61,6 +67,10 @@ export default {
     { name: 'basin-dialog', query: '?date=2025-10-22&view=zonal&huc=4&basin=1002&plot=hypsomeswe', ready: plotShown },
     // Place search with its listbox open (the Gazetteer and the watersheds).
     { name: 'search-list', query: '?date=2026-02-15', ready: searchListOpen },
+    // SNOTEL stations over the gridded view, and one station's dialog on a
+    // date its plots exist.
+    { name: 'snotel', query: '?date=2026-02-15&snotel=on&lng=-111.5&lat=46.0&zoom=6', ready: painted },
+    { name: 'station-dialog', query: '?date=2026-10-30&snotel=on&station=901_MT_SNTL', ready: stationShown },
     // Ski runs, lifts and names over Big Sky, close enough for the trail signs.
     { name: 'ski-runs', query: '?date=2026-02-15&lng=-111.40&lat=45.28&zoom=13.5', ready: painted },
   ],

@@ -20,6 +20,15 @@ in past years and colored with the U.S. Drought Monitor categories (D4 to W4).
   default), Fitted (`zig`) and Empirical (`ecdf`). The method is in
   [`normals/README.md`](https://data2.climate.umt.edu/snodas/normals/README.md)
   beside the data.
+- **SNOTEL stations**: turned on with the SNOTEL button in the bar, every NRCS SNOTEL station
+  in the SNODAS domain, colored by its own SWE percentile for the date and
+  flavor, against the `snodas` normals period (the SNODAS normals' reference
+  years). Clicking one opens its seasonal SWE plot, in any of the three
+  flavors. Read from `https://data2.climate.umt.edu/snotel/`, written by
+  mco-snotel (its `CONSUMERS.md`). The map's date D shows SNOTEL's D − 1:
+  SNODAS is the analysis at midnight Mountain as D begins, and mco-snotel
+  stamps NRCS daily values at the end of their day, so that same midnight is
+  its D − 1. The tooltip, dialog and plot name both dates.
 - **Ski areas**: every operating downhill ski area in the SNODAS domain
   (the Canadian Columbia basin's included) can be searched by name. From
   zoom 11 its name, downhill runs and lifts draw over the snow, the runs with
@@ -30,9 +39,13 @@ in past years and colored with the U.S. Drought Monitor categories (D4 to W4).
 
 ## Where the data comes from
 
-Everything is read from `https://data2.climate.umt.edu/snodas/`, written by the
-[mco-snodas](https://github.com/mt-climate-office/mco-snodas) pipeline (a
+The snow data is read from `https://data2.climate.umt.edu/snodas/`, written by
+the [mco-snodas](https://github.com/mt-climate-office/mco-snodas) pipeline (a
 private repository; its `s3-docs/` are published as READMEs in the bucket).
+The SNOTEL stations are read from `https://data2.climate.umt.edu/snotel/`,
+written by [mco-snotel](https://github.com/mt-climate-office/mco-snotel)
+(stations, the water year's observed percentiles, per-station normals and
+plots, as its `CONSUMERS.md` describes).
 The page has no backend.
 
 | What | Path under `snodas/` |
@@ -66,6 +79,8 @@ are left out of the URL.
 | `lng`, `lat`, `zoom` | the camera | the lower 48 |
 | `theme` | `dark`, `light`, `high-contrast` | the system setting |
 | `export` | `light`, `dark` (`true` also works): download the map as a PNG on load | none |
+| `snotel` | `on`: show the SNOTEL stations | off |
+| `station` | a station, e.g. `901_MT_SNTL`; opens its plot dialog (and shows the stations) | none |
 | `kbd` | `off`: turn off the `/` shortcut to the search box | on |
 
 An old `?method=zig` or `?method=ecdf` link still opens on that flavor.

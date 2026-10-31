@@ -181,6 +181,14 @@
   let currentAnim  = askedBasin && isSnowYear(urlParams.get('anim')) ? +urlParams.get('anim') : null;
   if (currentAnim) currentPlot = 'hypsomeswe';
 
+  // SNOTEL stations: ?snotel=on shows them over either view, and
+  // ?station=<id> (the triplet with _ for :, as in 901_MT_SNTL) opens one
+  // station's dialog, which turns them on. A basin link wins over a station.
+  const isStationId = (s) => /^\d+_[A-Z]{2}_SNTL$/.test(s || '');
+  const askedStation = !askedBasin && isStationId(urlParams.get('station')) ? urlParams.get('station') : null;
+  let snotelOn = getLower('snotel') === 'on' || !!askedStation;
+  let currentStation = null;   // the open station's row from stations.parquet
+
   // ?kbd=off turns off the single-character shortcut (/ for search), the
   // opt-out WCAG 2.1.4 asks for. Carried in every URL write.
   const kbdShortcuts = getLower('kbd') !== 'off';
@@ -246,6 +254,8 @@
       if (currentPlot !== DEFAULT_PLOT) params.plot = currentPlot;
       if (currentAnim) params.anim = currentAnim;
     }
+    if (snotelOn) params.snotel = 'on';
+    if (currentStation) params.station = currentStation.id;
     const theme = MCO.getTheme();
     if (theme !== MCO.osTheme()) params.theme = theme;
     if (!kbdShortcuts) params.kbd = 'off';
@@ -429,6 +439,7 @@
   let _searchHit = EMPTY_FC;   // the search highlight, kept across style swaps
   let _skiData = EMPTY_FC;     // the ski runs and lifts loaded so far, likewise
   let _skiNames = EMPTY_FC;    // a point per named ski area, for its label
+  let _snotelData = EMPTY_FC;  // the SNOTEL stations with the date's percentiles
 
   // Ski runs and lifts draw from SKI_MIN_ZOOM, where a resort is a few
   // hundred pixels across; their difficulty signs from SKI_SIGN_ZOOM. The
@@ -592,6 +603,54 @@
       });
     }
 
+    // SNOTEL stations, coloured by the date's percentile in the map's own
+    // ramp, over either view while they are on (updateSnotel fills them).
+    // Each is ringed in #222 inside a white ring, so a station holds against
+    // a fill of its own colour. One with no percentile is a smaller grey dot:
+    // size, not colour alone, says "no reading" (a hollow ring read as the
+    // white near-normal class over white ground). The open station gets
+    // --selection-ring and the table twin's keyboard focus --accent-line, as
+    // watersheds do. Colours read at paint time.
+    if (!map.getSource('snotel')) map.addSource('snotel', { type: 'geojson', data: _snotelData, attribution: SNOTEL_CREDIT });
+    const noRead = ['==', ['get', 'ptile'], null];
+    const grow = (d) => ['interpolate', ['linear'], ['zoom'], ...SNOTEL_RADIUS.flatMap(([z, v]) =>
+      [z, ['case', noRead, v * SNOTEL_NOREAD_SCALE + d, v + d]])];
+    if (!map.getLayer('snotel-halo')) {
+      map.addLayer({
+        id: 'snotel-halo', type: 'circle', source: 'snotel', layout: { visibility: 'none' },
+        paint: { 'circle-radius': grow(1.5), 'circle-color': 'rgba(0,0,0,0)',
+                 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2, 'circle-stroke-opacity': 0.9 },
+      }, before);
+    }
+    if (!map.getLayer('snotel')) {
+      map.addLayer({
+        id: 'snotel', type: 'circle', source: 'snotel', layout: { visibility: 'none' },
+        paint: {
+          'circle-radius': grow(0),
+          'circle-color': ['case', noRead, SNOTEL_NOREAD,
+            ['step', ['get', 'ptile'], `rgb(${COLORS[0]})`, ...HUC_COLOR_STOPS]],
+          'circle-stroke-color': '#222222', 'circle-stroke-width': 1.5,
+        },
+      }, before);
+    }
+    if (!map.getLayer('snotel-focus')) {
+      map.addLayer({
+        id: 'snotel-focus', type: 'circle', source: 'snotel', layout: { visibility: 'none' },
+        filter: ['==', ['get', 'id'], _focusedStation ?? ''],
+        paint: { 'circle-radius': grow(5), 'circle-color': 'rgba(0,0,0,0)',
+                 'circle-stroke-color': MCO.cssVar('--accent-line'), 'circle-stroke-width': 2 },
+      }, before);
+    }
+    if (!map.getLayer('snotel-selected')) {
+      map.addLayer({
+        id: 'snotel-selected', type: 'circle', source: 'snotel', layout: { visibility: 'none' },
+        filter: ['==', ['get', 'id'], currentStation?.id ?? ''],
+        paint: { 'circle-radius': grow(5), 'circle-color': 'rgba(0,0,0,0)',
+                 'circle-stroke-color': MCO.cssVar('--selection-ring'), 'circle-stroke-width': 3 },
+      }, before);
+    }
+    setSnotelVisible(snotelOn);
+
     // What search last went to, in both views: a watershed's outline
     // (--selection-ring, as the open basin's) or a city or ZIP code's point
     // (--accent, ringed in --bg-surface so it holds on any fill). Neither is
@@ -694,6 +753,8 @@
     writeUrl();
     map.on('moveend', updateSki);
     updateSki();
+    map.on('moveend', renderStationTwin);
+    updateSnotel();
 
     // First meaningful state: the first data layer has drawn. Releases the
     // kit's html.mco-booting first-paint hold; the anti-flash snippet's 3 s
@@ -706,6 +767,7 @@
     // ?basin= opens its dialog in place: the entry already names it, so this
     // replaces rather than pushes.
     if (askedBasin && !exportOnLoad) openBasin(askedBasin, { push: false });
+    if (askedStation && !exportOnLoad) openStation(askedStation, { push: false });
   });
 
   // The gridded view's layers — the raster and the domain outline — and the
@@ -727,6 +789,7 @@
     if (!_layersAdded) return;
     setSweLayer(currentDate);
     if (currentView === 'zonal') setHucLayer();
+    updateSnotel();
   }
 
 
@@ -740,7 +803,7 @@
     let d = dateStr;
     if (d < SNODAS_START)  { d = SNODAS_START;  showToast(`The earliest date is ${MCO.formatDateStr(d)}.`); }
     if (d > latestDate)    { d = latestDate;    showToast(`The latest date with data is ${MCO.formatDateStr(d)}.`); }
-    if (d === currentDate) { dateInput.value = d; basinDate.value = d; return; }
+    if (d === currentDate) { dateInput.value = d; basinDate.value = d; stationDate.value = d; return; }
 
     loading.start();
     if (!(await cogExists(d))) {
@@ -750,6 +813,7 @@
         showToast(`No SNODAS data was found near ${MCO.formatDateStr(d)}.`, 5000);
         dateInput.value = currentDate;
         basinDate.value = currentDate;
+        stationDate.value = currentDate;
         return;
       }
       d = fallback;
@@ -766,6 +830,7 @@
     fetchProvenance(currentDate).then(updateLegendMeta);
     refreshSteppers();
     renderBasin();
+    renderStation();
   }
 
   dateInput.addEventListener('change', () => {
@@ -953,12 +1018,12 @@
 
   // ── View and HUC level ────────────────────────────────────────────────────
   // Radio fieldsets with <select> twins, one source of truth each:
-  // MCO.initSegmentedFallback. The twins take over below 1700px, not the
-  // ladder's 1400: the zonal view's bar (search, date, three groups, labels
-  // still shown above 1400) needs about 1,650px as buttons, and wrapped to a
-  // second row between 1400 and that.
+  // MCO.initSegmentedFallback. The twins take over below 1760px, not the
+  // ladder's 1400: the zonal view's bar (search, date, three groups and the
+  // SNOTEL toggle, labels still shown above 1400) needs about 1,720px as
+  // buttons, and wrapped to a second row between 1400 and that.
   const hucGroup = document.getElementById('huc-group');
-  const SEG_MQ = '(max-width: 1700px)';
+  const SEG_MQ = '(max-width: 1760px)';
   const viewCtl = MCO.initSegmentedFallback({
     group: document.getElementById('view-btns'),
     select: document.getElementById('view-select'),
@@ -1002,6 +1067,7 @@
     refreshLayers();
     fetchProvenance(currentDate).then(updateLegendMeta);
     renderBasin();
+    renderStation();
   }
 
   function setView(v, { silent = false } = {}) {
@@ -1038,6 +1104,14 @@
     if (_backFromClose) { _backFromClose = false; writeUrl(); return; }
     // Back from an open dialog closes it, and only that: the date and
     // normals chosen inside it stay, exactly as the × and Esc leave them.
+    if (stationModal.open && !isStationId(params.get('station'))) {
+      _closingFromHistory = true;
+      currentStation = null;
+      stationModal.close();
+      MCO.announce('Station closed');
+      writeUrl();
+      return;
+    }
     if (basinModal.open && !isHuc(params.get('basin'))) {
       _closingFromHistory = true;
       currentBasin = null;   // the close event is async; this write must not carry it
@@ -1058,8 +1132,11 @@
     if (PLOT_TYPES[t]) setPlotType(t, { silent: true });
     const a = params.get('anim');
     setAnim(isSnowYear(a) ? +a : null, { silent: true });
+    const station = params.get('station');
+    setSnotel(params.get('snotel') === 'on' || isStationId(station), { silent: true });
     const basin = params.get('basin');
     if (isHuc(basin) && (!basinModal.open || currentBasin?.huc !== basin)) openBasin(basin, { push: false });
+    else if (isStationId(station) && (!stationModal.open || currentStation?.id !== station)) openStation(station, { push: false });
   });
 
   // ── Hover tooltip ─────────────────────────────────────────────────────────
@@ -1140,6 +1217,9 @@
 
   map.on('mousemove', async (e) => {
     const seq = ++_hoverSeq;
+    const st = stationAt(e.point);
+    map.getCanvas().style.cursor = st ? 'pointer' : '';
+    if (st) { showTooltip(stationReading(st), e); return; }
     if (currentView === 'zonal') {
       const hits = map.queryRenderedFeatures(e.point, { layers: ['huc-fill'] });
       if (hits.length) showTooltip(zonalReading(hits[0]), e);
@@ -1159,6 +1239,8 @@
   // touch path and the assistive-tech path to a value, since a hover
   // tooltip is never surfaced.
   map.on('click', async (e) => {
+    const st = stationAt(e.point);
+    if (st) { openStation(st.id); return; }
     if (currentView === 'zonal') {
       const hits = map.queryRenderedFeatures(e.point, { layers: ['huc-fill'] });
       if (!hits.length) return;
@@ -1486,15 +1568,15 @@
   function plotIndex(d) {
     return _cache.cached(`plots:${d}`, () => MCO.fetchJSON(`${PLOTS_ROOT}/${d}/index.json`).catch(() => null));
   }
-  // The "folders" one level under prefix, from the bucket's anonymous
-  // listing, every page of it.
-  async function s3Prefixes(prefix) {
+  // The "folders" one level under prefix, from a bucket's anonymous listing
+  // (snodas, or snotel for the station plots), every page of it.
+  async function s3Prefixes(prefix, bucket = 'snodas') {
     const out = [];
     let token = null;
     do {
       const q = new URLSearchParams({ 'list-type': '2', prefix, delimiter: '/' });
       if (token) q.set('continuation-token', token);
-      const res = await fetch(`${DATA_HOST}/snodas/?${q}`);
+      const res = await fetch(`${DATA_HOST}/${bucket}/?${q}`);
       if (!res.ok) throw new Error(`listing of ${prefix} failed: ${res.status}`);
       const xml = new DOMParser().parseFromString(await res.text(), 'application/xml');
       for (const el of xml.getElementsByTagName('Prefix')) out.push(el.textContent);
@@ -1508,13 +1590,14 @@
       .map(p => /^plots\/(\d{4}-\d{2}-\d{2})\/$/.exec(p)?.[1]).filter(Boolean).sort()
     ).catch(() => []);
   }
-  // The closest date to d whose plots are complete (its index.json exists).
-  async function nearestPlotDate(d) {
+  // The closest date to d whose plots are complete (its index.json exists):
+  // the basins' by default, the stations' with their own two lookups.
+  async function nearestPlotDate(d, { dates = plotDates, index = plotIndex } = {}) {
     const t = (x) => new Date(`${x}T12:00:00`).getTime();
-    const ranked = (await plotDates())
+    const ranked = (await dates())
       .filter(x => x !== d && x >= SNODAS_START && x <= latestDate)
       .sort((a, b) => Math.abs(t(a) - t(d)) - Math.abs(t(b) - t(d)));
-    for (const x of ranked.slice(0, 5)) if (await plotIndex(x)) return x;
+    for (const x of ranked.slice(0, 5)) if (await index(x)) return x;
     return null;
   }
 
@@ -2013,6 +2096,433 @@
     }
   }
 
+  // ── SNOTEL stations ───────────────────────────────────────────────────────
+  // NRCS SNOTEL stations with their own SWE percentiles, from mco-snotel at
+  // data2.climate.umt.edu/snotel/ (its CONSUMERS.md). The `snodas` normals
+  // period, whose reference years are the SNODAS normals', so a station
+  // reads against the same years as the map behind it; the flavor is the
+  // map's. Stations sit in water years (1 October – 30 September), the
+  // SNODAS snow year a month later.
+  //
+  // The day's percentiles come from the water year's observed table
+  // (observedOn), read only while the layer is on. The current year is read
+  // from latest/, which the CDN refreshes hourly.
+  //
+  // The two products date the same moment a day apart. A SNODAS day is its
+  // analysis at 06:00 UTC, midnight Mountain as the day begins; mco-snotel
+  // stamps NRCS's daily values at the end of their day (AWDB periodRef =
+  // END), so its reading at that same midnight carries the day before. Map
+  // date D therefore shows SNOTEL's D − 1 (snotelDay), and every place a
+  // station's date is printed names both, since the plots and NRCS's own
+  // pages carry the earlier one.
+  const SNOTEL_ROOT   = `${DATA_HOST}/snotel`;
+  const SNOTEL_PERIOD = 'snodas';
+  const SNOTEL_RADIUS = [[3, 3.5], [7, 5], [11, 7.5]];   // [zoom, px]
+  const SNOTEL_NOREAD = '#9a9a9a';   // a station with no reading: grey,
+  const SNOTEL_NOREAD_SCALE = 0.6;   // …and smaller
+  const SNOTEL_CREDIT = 'USDA NRCS SNOTEL';
+  const waterYear = (d) => +d.slice(0, 4) + (+d.slice(5, 7) >= 10 ? 1 : 0);
+  const snotelDay = (d) => MCO.shiftDate(d, -1);
+  const mapDay    = (d) => MCO.shiftDate(d, 1);
+  const nrcsLabel = (d) => `NRCS ${MCO.formatDateStr(snotelDay(d))}, end of day`;
+  const inToMm = (v) => (v == null ? null : v * 25.4);
+  const isoDay = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10));
+  const pqZstd = (pq) => ({ ZSTD: (input) => pq.zstdDecompress(input) });
+
+  function snotelManifest() {
+    return _cache.cached('snotel:manifest', () => MCO.fetchJSON(`${SNOTEL_ROOT}/latest/manifest.json`, { cache: 'no-cache' }));
+  }
+
+  // Stations in the SNODAS domain, active now or reporting past the start of
+  // the earliest water year the map reaches.
+  function loadStations() {
+    return _cache.cached('snotel:stations', async () => {
+      const pq = await parquetLib();
+      const res = await fetch(`${SNOTEL_ROOT}/stations/stations.parquet`);
+      if (!res.ok) throw new Error(`stations fetch failed: ${res.status}`);
+      const rows = await pq.parquetReadObjects({ file: await res.arrayBuffer(), compressors: pqZstd(pq) });
+      const [[w, s], [e, n]] = COG_BOUNDS;
+      const since = `${waterYear(SNODAS_START) - 1}-10-01`;
+      return rows
+        .filter(r => r.state !== 'AK' && r.longitude >= w && r.longitude <= e && r.latitude >= s && r.latitude <= n
+                  && (r.active || isoDay(r.end_date) >= since))
+        .map(r => ({ id: r.station, triplet: r.triplet, siteId: r.site_id, name: r.name, state: r.state,
+                     county: r.county, elev: r.elevation_ft, lon: r.longitude, lat: r.latitude }));
+    });
+  }
+
+  // One water year's observed table, opened by HTTP range requests: the
+  // footer once, then only the row groups a date needs. mco-snotel sorts it
+  // by flavor, date and triplet and writes about a month of one flavor per
+  // row group, so a date is one group, or two where a group boundary falls
+  // inside it; each group's flavor and date statistics say which. A group is
+  // kept once read, so stepping through a month fetches nothing more. A
+  // table written as a single group (as before that layout) is read whole,
+  // once. Null when the water year has no table yet.
+  function observedFile(wy) {
+    return _cache.cached(`snotel:obsfile:${wy}`, async () => {
+      const latest = await snotelManifest().catch(() => null);
+      const url = latest?.water_year === wy
+        ? `${SNOTEL_ROOT}/latest/observed_${SNOTEL_PERIOD}.parquet`
+        : `${SNOTEL_ROOT}/normals/${SNOTEL_PERIOD}/observed/wy${wy}.parquet`;
+      const head = await fetch(url, { method: 'HEAD' });
+      if (head.status === 404) return null;
+      if (!head.ok) throw new Error(`observed table ${head.status}`);
+      const pq = await parquetLib();
+      const file = await pq.asyncBufferFromUrl({ url, byteLength: +head.headers.get('content-length') });
+      // The footer is a few tens of KB; hyparquet's first guess is the last
+      // 512 KB of the file, and it reads further itself if a footer is bigger.
+      const metadata = await pq.parquetMetadataAsync(file, { initialFetchSize: 1 << 16 });
+      // A DATE statistic comes back as a Date, or as days since 1970.
+      const day = (v) => (v == null ? null : typeof v === 'number' ? isoDay(new Date(v * 864e5)) : isoDay(v));
+      let start = 0;
+      const groups = metadata.row_groups.map((g) => {
+        const stat = (col) => g.columns.find(c => c.meta_data.path_in_schema[0] === col)?.meta_data.statistics || {};
+        const f = stat('flavor'), d = stat('date');
+        const out = { start, end: start + Number(g.num_rows),
+                      fMin: f.min_value ?? null, fMax: f.max_value ?? null, dMin: day(d.min_value), dMax: day(d.max_value) };
+        start = out.end;
+        return out;
+      });
+      return { file, metadata, groups };
+    });
+  }
+  // One row group: `${flavor}|${date}` → Map(triplet → { swe, ptile }), SWE
+  // in inches as NRCS stores it.
+  function observedGroup(wy, i) {
+    return _cache.cached(`snotel:obs:${wy}:${i}`, async () => {
+      const { file, metadata, groups } = await observedFile(wy);
+      const pq = await parquetLib();
+      const rows = await pq.parquetReadObjects({
+        file, metadata, columns: ['flavor', 'date', 'triplet', 'swe', 'swe_ptile'],
+        rowStart: groups[i].start, rowEnd: groups[i].end, compressors: pqZstd(pq),
+      });
+      const byDay = new Map();
+      for (const r of rows) {
+        const k = `${r.flavor}|${isoDay(r.date)}`;
+        if (!byDay.has(k)) byDay.set(k, new Map());
+        byDay.get(k).set(r.triplet, { swe: r.swe ?? null, ptile: r.swe_ptile ?? null });
+      }
+      return byDay;
+    });
+  }
+  // A date's readings for one flavor: triplet → { swe, ptile }. A group with
+  // no statistics for a column can't be ruled out, so it is read.
+  async function observedOn(date, flavor) {
+    const wy = waterYear(date);
+    const f = await observedFile(wy);
+    if (!f) return new Map();
+    const within = (lo, hi, v) => lo == null || hi == null || (lo <= v && v <= hi);
+    const hits = f.groups.flatMap((g, i) => (within(g.dMin, g.dMax, date) && within(g.fMin, g.fMax, flavor) ? [i] : []));
+    const out = new Map();
+    for (const byDay of await Promise.all(hits.map(i => observedGroup(wy, i)))) {
+      for (const [t, v] of byDay.get(`${flavor}|${date}`) || []) out.set(t, v);
+    }
+    return out;
+  }
+
+  // One station's normals for its water year (all flavors and days, ~130 KB):
+  // `${flavor}|${date}` → { mean, q10, q50, q90 }, inches. Only for the
+  // dialog's data table and text alternative.
+  function loadStationNormals(id, wy) {
+    return _cache.cached(`snotel:normals:${id}:${wy}`, async () => {
+      const pq = await parquetLib();
+      const res = await fetch(`${SNOTEL_ROOT}/normals/${SNOTEL_PERIOD}/wy${wy}/by_station/${id}.parquet`);
+      if (!res.ok) throw new Error(`normals fetch failed: ${res.status}`);
+      const rows = await pq.parquetReadObjects({
+        file: await res.arrayBuffer(), columns: ['flavor', 'date', 'mean', 'q0100', 'q0500', 'q0900'], compressors: pqZstd(pq),
+      });
+      return new Map(rows.map(r => [`${r.flavor}|${isoDay(r.date)}`,
+        { mean: r.mean ?? null, q10: r.q0100 ?? null, q50: r.q0500 ?? null, q90: r.q0900 ?? null }]));
+    });
+  }
+
+  // Draw the stations for the page's date and flavor. Silent while off.
+  let _snotelSeq = 0;
+  let _snotelRows = [];   // what the map drew, for the table twin
+  async function updateSnotel() {
+    if (!snotelOn || !_layersAdded) return;
+    const seq = ++_snotelSeq;
+    const date = currentDate, flavor = currentFlavor;
+    loading.start();
+    try {
+      const [stations, obs] = await Promise.all([loadStations(), observedOn(snotelDay(date), flavor)]);
+      if (seq !== _snotelSeq) return;
+      _snotelRows = stations.map(st => ({ ...st, ...(obs.get(st.triplet) || { swe: null, ptile: null }) }));
+      _snotelData = { type: 'FeatureCollection', features: _snotelRows.map(st => ({
+        type: 'Feature', properties: { id: st.id, ptile: st.ptile },
+        geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) };
+      map.getSource('snotel')?.setData(_snotelData);
+      renderStationTwin();
+      loading.done();
+      // If the stations are behind the map (a late or failed nightly run),
+      // say how far they run rather than leave every station grey.
+      const through = (await snotelManifest().catch(() => null))?.date;
+      if (seq === _snotelSeq && through && snotelDay(date) > through && !_snotelRows.some(st => st.ptile != null)) {
+        showToast(`SNOTEL readings run through ${MCO.formatDateStr(mapDay(through))}.`, 5000);
+      }
+    } catch (err) {
+      console.error('[snotel]', err);
+      if (seq !== _snotelSeq) return;
+      loading.fail('SNOTEL station data failed to load.', { retry: updateSnotel });
+    }
+  }
+
+  const SNOTEL_LAYERS = ['snotel-halo', 'snotel', 'snotel-focus', 'snotel-selected'];
+  function setSnotelVisible(on) {
+    for (const id of SNOTEL_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  }
+
+  // The on/off control: a toggle button in the navbar.
+  const snotelBtn = document.getElementById('btn-snotel');
+  function syncSnotelToggle() { snotelBtn.setAttribute('aria-pressed', String(snotelOn)); }
+  syncSnotelToggle();
+  snotelBtn.addEventListener('click', () => setSnotel(!snotelOn));
+
+  function setSnotel(on, { silent = false } = {}) {
+    if (on === snotelOn) return;
+    snotelOn = on;
+    syncSnotelToggle();
+    if (!on && stationModal.open) { currentStation = null; stationModal.close(); }
+    if (!silent) { writeUrl(); MCO.announce(on ? 'SNOTEL stations shown' : 'SNOTEL stations hidden'); }
+    if (!_layersAdded) return;
+    setSnotelVisible(on);
+    if (on) updateSnotel();
+    else { _snotelSeq++; renderStationTwin(); }
+  }
+
+  // The stations' table twin: the ones in view, by name, while they show.
+  // Keyed by date and flavor too: the kit's selectable twin rebuilds only
+  // when its keys change, and a percentile is part of what a row says.
+  let _focusedStation = null;
+  const stationTwin = MCO.srTable({
+    caption: 'SNOTEL stations in view',
+    selectable: true,
+    rowKey: (r) => `${r.id}|${currentDate}|${currentFlavor}`,
+    onSelect: (row) => openStation(row.id),
+    onFocus: (row) => setFocusedStation(row ? row.id : null),
+    columns: [
+      { key: 'name', label: 'Station', rowHeader: true },
+      { key: 'state', label: 'State' },
+      { key: 'elev', label: 'Elevation (ft)', value: (r) => Math.round(r.elev).toLocaleString('en-US') },
+      { key: 'ptile', label: 'SWE percentile', value: (r) => (r.ptile == null ? 'no reading' : ordinal(Math.round(r.ptile))) },
+    ],
+    overflowText: (n) => `…and ${n} more stations. Zoom in to list them all.`,
+  });
+  function renderStationTwin() {
+    if (!snotelOn) { stationTwin.render([]); return; }
+    const b = map.getBounds();
+    const rows = _snotelRows.filter(st => b.contains([st.lon, st.lat]))
+      .sort((a, z) => a.name.localeCompare(z.name));
+    stationTwin.render(rows, { selected: currentStation ? `${currentStation.id}|${currentDate}|${currentFlavor}` : null });
+  }
+  function setFocusedStation(id) {
+    _focusedStation = id;
+    if (map.getLayer('snotel-focus')) map.setFilter('snotel-focus', ['==', ['get', 'id'], id ?? '']);
+  }
+  function setSelectedStation(id) {
+    if (map.getLayer('snotel-selected')) map.setFilter('snotel-selected', ['==', ['get', 'id'], id ?? '']);
+  }
+
+  // The station under a map point (within a few pixels, for a finger), or null.
+  function stationAt(point) {
+    if (!snotelOn || !map.getLayer('snotel')) return null;
+    const pad = 6;
+    const hit = map.queryRenderedFeatures([[point.x - pad, point.y - pad], [point.x + pad, point.y + pad]], { layers: ['snotel'] })[0];
+    return hit ? _snotelRows.find(st => st.id === hit.properties.id) || null : null;
+  }
+  // The tooltip's lines for a station, as for a watershed: no median here,
+  // so the percentile alone.
+  function stationReading(st) {
+    return {
+      title: `${st.name} (SNOTEL ${st.siteId})`,
+      lines: [MCO.formatDateStr(currentDate),
+        st.swe == null && st.ptile == null ? 'No reading for this date' : conditions(inToMm(st.swe), null, st.ptile),
+        sweLine(inToMm(st.swe)), nrcsLabel(currentDate)].filter(Boolean),
+    };
+  }
+
+  // ── The station dialog ──
+  // One station's seasonal SWE plot, which mco-snotel renders per date,
+  // period and flavor (plots/{date}/{period}/{flavor}/swe/usdm/{station}.png,
+  // plots/{date}/index.json written last). Built like the basin dialog: its
+  // date and normals controls are the page's own, and there is one plot type,
+  // since a station has no elevation bands.
+  const stationModal    = document.getElementById('station-modal');
+  const stationCtl      = MCO.initInfoModal({ dialog: stationModal });
+  const stationTitle    = document.getElementById('station-title');
+  const stationSubtitle = document.getElementById('station-subtitle');
+  const stationDate     = document.getElementById('station-date');
+  const stationFlavorFs = document.getElementById('station-flavor-btns');
+  const stationFrame    = document.getElementById('station-frame');
+  const stationImg      = document.getElementById('station-img');
+  const stationEmpty    = document.getElementById('station-empty');
+  const stationCaption  = document.getElementById('station-caption');
+  const stationTable    = document.getElementById('station-table');
+
+  stationDate.min = SNODAS_START;
+  stationDate.max = latestDate;
+  stationDate.value = currentDate;
+  stationDate.addEventListener('change', () => {
+    if (isIsoDate(stationDate.value)) setDate(stationDate.value);
+    else stationDate.value = currentDate;
+  });
+  steppers.push(MCO.initStepper({
+    prev: document.getElementById('btn-station-prev'), next: document.getElementById('btn-station-next'), ...stepperOpts,
+  }));
+  stationFlavorFs.addEventListener('change', (e) => setFlavor(e.target.value));
+
+  // Opening is drill-down, as a basin's: a pushed entry, so Back closes it.
+  async function openStation(id, { push = true } = {}) {
+    let st = null;
+    try { st = (await loadStations()).find(x => x.id === id); } catch { /* below */ }
+    if (!st) { showToast(`No SNOTEL station ${id} was found.`); return; }
+    const wasOpen = stationModal.open;
+    currentStation = st;
+    if (!snotelOn) setSnotel(true, { silent: true });
+    setSelectedStation(id);
+    renderStationTwin();
+    writeUrl(push && !wasOpen ? { push: true, state: { mcoDetail: `station:${id}` } } : {});
+    if (!wasOpen) stationCtl.open();
+    renderStation();
+  }
+
+  // The basin dialog's single close path, for this one.
+  stationModal.addEventListener('close', () => {
+    currentStation = null;
+    _stationSeq++;
+    setSelectedStation(null);
+    renderStationTwin();
+    if (_closingFromHistory) _closingFromHistory = false;
+    else if (history.state && history.state.mcoDetail) { _backFromClose = true; history.back(); }
+    else writeUrl();
+    setTimeout(() => {
+      if (!document.activeElement || document.activeElement === document.body) mainEl.focus();
+    }, 0);
+  });
+
+  // Which dates have station plots: as for the basins, from the snotel
+  // bucket. index.json's `periods` is an array, or a bare string when there
+  // is only one.
+  function stationPlotIndex(d) {
+    return _cache.cached(`snotel:plots:${d}`, async () => {
+      const idx = await MCO.fetchJSON(`${SNOTEL_ROOT}/plots/${d}/index.json`).catch(() => null);
+      return idx && [].concat(idx.periods || []).includes(SNOTEL_PERIOD) ? idx : null;
+    });
+  }
+  function stationPlotDates() {
+    return _cache.cached('snotel:plots:dates', async () => (await s3Prefixes('plots/', 'snotel'))
+      .map(p => /^plots\/(\d{4}-\d{2}-\d{2})\/$/.exec(p)?.[1]).filter(Boolean).sort()
+    ).catch(() => []);
+  }
+  // The same two, in map dates (a station plot for D − 1 is the map's D),
+  // for nearestPlotDate.
+  const stationPlotMapDates = async () => (await stationPlotDates()).map(mapDay);
+  const stationPlotMapIndex = (d) => stationPlotIndex(snotelDay(d));
+  const stationPlotUrl = (idx, d, flavor, id) => `${SNOTEL_ROOT}/plots/${d}/`
+    + (idx.path || '{period}/{flavor}/{type}/{style}/{station}.png')
+      .replace('{period}', SNOTEL_PERIOD).replace('{flavor}', flavor).replace('{type}', 'swe')
+      .replace('{style}', PLOT_STYLE).replace('{station}', id);
+
+  function showStationEmpty(text, action) {
+    stationImg.hidden = true;
+    stationCaption.textContent = '';
+    const kids = [h('p', { textContent: text })];
+    if (action) kids.push(h('button', { type: 'button', className: 'nav-btn', textContent: action.label,
+      onclick: () => { action.focus?.focus(); action.onClick(); } }));
+    stationEmpty.replaceChildren(...kids);
+    stationEmpty.hidden = false;
+    MCO.announce(text);
+  }
+
+  function stationAlt(st, obs, norm, date, { pending = false } = {}) {
+    const head = `Snow water equivalent at ${st.name} SNOTEL station through water year ${waterYear(snotelDay(date))} (October 1 to September 30), drawn against the range of ${flavorName().toLowerCase()}.`;
+    const when = `At the start of ${MCO.formatDateStr(date)} (${nrcsLabel(date)})`;
+    const now = pending ? '' : obs?.swe != null
+      ? ` ${when} the station measured ${fmtSwe(inToMm(obs.swe))}${obs.ptile != null ? `, the ${fmtPtile(obs.ptile)}` : ''}`
+        + (norm?.q50 != null ? `; the median for that date is ${fmtSwe(inToMm(norm.q50))}.` : '.')
+      : ` There is no reading for the start of ${MCO.formatDateStr(date)}.`;
+    return `${head}${now} The numbers are in the data table below the plot.`;
+  }
+  function renderStationTable(st, obs, norm, date) {
+    stationTable.replaceChildren(factsTable(`${st.name}, start of ${MCO.formatDateStr(date)} (${nrcsLabel(date)}), ${flavorName().toLowerCase()}`, [
+      ['Observed SWE', fmtSwe(inToMm(obs?.swe))],
+      ['Percentile', obs?.ptile == null ? '—' : ordinal(Math.round(obs.ptile))],
+      ['Median for this date', fmtSwe(inToMm(norm?.q50))],
+      ['Normal range (10th–90th percentile)', norm ? `${fmtSwe(inToMm(norm.q10))} to ${fmtSwe(inToMm(norm.q90))}` : '—'],
+      ['Mean for this date', fmtSwe(inToMm(norm?.mean))],
+    ]));
+  }
+
+  let _stationSeq = 0;
+  async function renderStation() {
+    if (!currentStation) return;
+    const seq = ++_stationSeq;
+    const st = currentStation;
+    const date = currentDate, flavor = currentFlavor;
+    const day = snotelDay(date);   // the station's own date for that moment
+    stationDate.value = date;
+    checkRadio(stationFlavorFs, flavor);
+    stationTitle.textContent = st.name;
+    stationSubtitle.textContent = `SNOTEL ${st.siteId} · ${st.county ? `${st.county} County, ` : ''}${st.state} · ${Math.round(st.elev).toLocaleString('en-US')} ft`;
+    stationFrame.setAttribute('aria-busy', 'true');
+
+    // The numbers (the year's observed table can take seconds the first
+    // time) fill the table and the text alternative when they arrive; the
+    // plot doesn't wait for them.
+    const numbers = Promise.all([
+      observedOn(day, flavor).catch(() => null),
+      loadStationNormals(st.id, waterYear(day)).catch(() => null),
+    ]).then(([obsDay, normals]) => ({
+      obs: obsDay?.get(st.triplet) ?? null, norm: normals?.get(`${flavor}|${day}`) ?? null,
+    }));
+    let got = null, shown = false;
+    numbers.then((n) => {
+      if (seq !== _stationSeq) return;
+      got = n;
+      renderStationTable(st, n.obs, n.norm, date);
+      if (shown) stationImg.alt = stationAlt(st, n.obs, n.norm, date);
+    });
+
+    const idx = await stationPlotIndex(day);
+    if (seq !== _stationSeq) return;
+
+    if (!idx || (idx.flavors && !idx.flavors.includes(flavor))) {
+      const near = await nearestPlotDate(date, { dates: stationPlotMapDates, index: stationPlotMapIndex });
+      if (seq !== _stationSeq) return;
+      stationFrame.removeAttribute('aria-busy');
+      showStationEmpty(`Station plots aren't available for ${MCO.formatDateStr(date)} yet.`,
+        near && { label: `Show ${MCO.formatDateStr(near)}`, onClick: () => setDate(near), focus: stationDate });
+      return;
+    }
+
+    const url = stationPlotUrl(idx, day, flavor, st.id);
+    const ok = await loadImage(url);
+    if (seq !== _stationSeq) return;
+    stationFrame.removeAttribute('aria-busy');
+    if (!ok) {
+      // mco-snotel plots active stations once they have SWE in the water year.
+      const { obs } = await numbers;
+      if (seq !== _stationSeq) return;
+      showStationEmpty(obs?.swe ? `The plot for ${st.name} failed to load.`
+        : `No plot for ${st.name} on ${MCO.formatDateStr(date)}. Stations are plotted once they have snow in the water year.`,
+        obs?.swe ? { label: 'Retry', onClick: renderStation, focus: stationDate } : null);
+      return;
+    }
+    stationEmpty.hidden = true;
+    stationImg.alt = got ? stationAlt(st, got.obs, got.norm, date) : stationAlt(st, null, null, date, { pending: true });
+    shown = true;
+    stationImg.src = url;
+    stationImg.hidden = false;
+    const years = idx.reference_water_years?.[SNOTEL_PERIOD];
+    stationCaption.replaceChildren(`SWE · start of ${MCO.formatDateStr(date)}, dated ${MCO.formatDateStr(day)} on the plot as NRCS does · ${flavorName(flavor)}`
+      + (Array.isArray(years) && years.length ? ` from water years ${years[0]}–${years[years.length - 1]}` : '')
+      + '. ', h('a', { href: url, target: '_blank', rel: 'noopener', textContent: 'Open the full-size plot' }), '.');
+
+    // The other two flavors share the frame and axis: warm them for a swap.
+    for (const f of Object.keys(FLAVORS)) if (f !== flavor) loadImage(stationPlotUrl(idx, day, f, st.id));
+  }
+
   // ── Search ────────────────────────────────────────────────────────────────
   // One field over states, counties, cities and ZIP codes (data/places/,
   // built from the Census Gazetteer by scripts/build-places.sh), ski areas
@@ -2248,7 +2758,7 @@
   // not over another dialog, and never once the visitor has started using
   // the page — focus has left <body> (WCAG 3.2.1). The seen flag is written
   // at open time, so an unclosed dialog still counts.
-  const DEEP_LINK_PARAMS = ['date', 'view', 'huc', 'flavor', 'basin', 'lng', 'export'];
+  const DEEP_LINK_PARAMS = ['date', 'view', 'huc', 'flavor', 'basin', 'station', 'snotel', 'lng', 'export'];
   const hasDeepLink = DEEP_LINK_PARAMS.some(k => urlParams.has(k));
   const seenIntro = MCO.lsGet(LS_INFO_SEEN) === '1' || MCO.lsGet(LS_INFO_SEEN_OLD) === '1';
   if (!seenIntro && !hasDeepLink) {
