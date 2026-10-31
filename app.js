@@ -427,6 +427,22 @@
   const HUC_LAYERS = ['huc-fill', 'huc-line', 'huc-focus', 'huc-selected'];
   const EMPTY_FC = { type: 'FeatureCollection', features: [] };
   let _searchHit = EMPTY_FC;   // the search highlight, kept across style swaps
+  let _skiData = EMPTY_FC;     // the ski runs and lifts loaded so far, likewise
+  let _skiNames = EMPTY_FC;    // a point per named ski area, for its label
+
+  // Ski runs and lifts draw from SKI_MIN_ZOOM, where a resort is a few
+  // hundred pixels across; their difficulty signs from SKI_SIGN_ZOOM. The
+  // colours are the North American trail signs', fixed in every theme as the
+  // signs are, each line on a white casing so it holds over the raster, the
+  // fills and either basemap (all ≥ 4.5:1 against white, WCAG 1.4.11).
+  const SKI_MIN_ZOOM  = 11;
+  const SKI_SIGN_ZOOM = 13;
+  const SKI_SIGN_PX   = 14;
+  const SKI_COLORS = { e: '#1e7b34', i: '#1d5fb8', a: '#111111', x: '#111111', u: '#5f5f5f' };
+  const SKI_LIFT   = '#9b1c1c';
+  const SKI_NAME_LIKE = 'place_villages';   // the CARTO label layer ski area names copy
+  const SKI_NAME_SCALE = 1.25;               // …at this size
+  const SKI_CREDIT = '<a href="https://openskimap.org" target="_blank" rel="noopener">OpenSkiMap</a>';
 
   // Add custom sources and layers in the correct z-order.
   // Called on initial load and after each basemap style swap.
@@ -511,6 +527,69 @@
         id: 'domain-line', type: 'line', source: 'domain',
         paint: { 'line-color': MCO.cssVar('--text-secondary'), 'line-width': 1.5, 'line-dasharray': [3, 2] },
       }, before);
+    }
+
+    // Ski runs and lifts (data/ski/, OpenSkiMap, by scripts/build-ski.sh),
+    // in both views, loaded area by area as the map comes near them
+    // (updateSki). Colour is never the only cue (WCAG 1.4.1): runs carry
+    // their sign's shape and lifts are dashed. Not interactive.
+    addSkiSigns();
+    if (!map.getSource('ski')) map.addSource('ski', { type: 'geojson', data: _skiData, attribution: SKI_CREDIT });
+    if (!map.getLayer('ski-casing')) {
+      map.addLayer({
+        id: 'ski-casing', type: 'line', source: 'ski', minzoom: SKI_MIN_ZOOM,
+        filter: ['!', ['has', 'o']],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#ffffff', 'line-width': 4.5, 'line-opacity': 0.9 },
+      }, before);
+    }
+    if (!map.getLayer('ski-run')) {
+      map.addLayer({
+        id: 'ski-run', type: 'line', source: 'ski', minzoom: SKI_MIN_ZOOM,
+        filter: ['has', 'd'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': ['match', ['get', 'd'], 'e', SKI_COLORS.e, 'i', SKI_COLORS.i, 'a', SKI_COLORS.a, 'x', SKI_COLORS.x, SKI_COLORS.u],
+          'line-width': 2,
+        },
+      }, before);
+    }
+    if (!map.getLayer('ski-lift')) {
+      map.addLayer({
+        id: 'ski-lift', type: 'line', source: 'ski', minzoom: SKI_MIN_ZOOM,
+        filter: ['has', 'l'],
+        paint: { 'line-color': SKI_LIFT, 'line-width': 2, 'line-dasharray': [2, 1] },
+      }, before);
+    }
+    if (!map.getLayer('ski-sign')) {
+      map.addLayer({
+        id: 'ski-sign', type: 'symbol', source: 'ski', minzoom: SKI_SIGN_ZOOM,
+        filter: ['all', ['has', 'd'], ['!=', ['get', 'd'], 'u']],
+        layout: {
+          'symbol-placement': 'line', 'symbol-spacing': 180,
+          'icon-image': ['concat', 'ski-', ['get', 'd']],
+          'icon-rotation-alignment': 'viewport', 'icon-padding': 2,
+        },
+      }, before);
+    }
+    // Each named area's name just below its lower edge, from SKI_MIN_ZOOM,
+    // set as the basemap sets a village's but SKI_NAME_SCALE larger (its
+    // layout and paint are copied from that layer, so it follows the theme)
+    // and placed with the basemap's labels.
+    if (!map.getSource('ski-names')) map.addSource('ski-names', { type: 'geojson', data: _skiNames });
+    if (!map.getLayer('ski-name')) {
+      const ref = map.getStyle().layers.find(l => l.id === SKI_NAME_LIKE);
+      const pick = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => k.startsWith('text-') && k !== 'text-field'));
+      // CARTO sizes it with legacy zoom stops; a plain number is scaled too.
+      const size = ref?.layout?.['text-size'] ?? 10;
+      const scaled = typeof size === 'number' ? size * SKI_NAME_SCALE
+        : size.stops ? { ...size, stops: size.stops.map(([z, v]) => [z, v * SKI_NAME_SCALE]) } : size;
+      map.addLayer({
+        id: 'ski-name', type: 'symbol', source: 'ski-names', minzoom: SKI_MIN_ZOOM,
+        layout: { ...pick(ref?.layout), 'text-field': ['get', 'name'], 'text-size': scaled,
+                  'text-anchor': 'top', 'text-offset': [0, 0.4] },
+        paint: pick(ref?.paint),
+      });
     }
 
     // What search last went to, in both views: a watershed's outline
@@ -613,6 +692,8 @@
     _mapReady = true;
     map.on('moveend', () => writeUrl());
     writeUrl();
+    map.on('moveend', updateSki);
+    updateSki();
 
     // First meaningful state: the first data layer has drawn. Releases the
     // kit's html.mco-booting first-paint hold; the anti-flash snippet's 3 s
@@ -1861,23 +1942,99 @@
     exportMap();
   });
 
+  // ── Ski areas ─────────────────────────────────────────────────────────────
+  // Every operating downhill area in the SNODAS domain, from OpenSkiMap
+  // (scripts/build-ski.sh). data/ski/areas.json lists them with their bounds;
+  // each area's runs and lifts are their own file, fetched once the map is
+  // zoomed in over it and kept for the session (10 MB for all of them).
+  const SKI_ROOT = 'data/ski';
+  function loadSkiIndex() {
+    return _cache.cached('ski:areas', async () => {
+      const areas = await MCO.fetchJSON(`${SKI_ROOT}/areas.json`);
+      _skiNames = { type: 'FeatureCollection', features: areas.filter(a => a[1]).map(([, name, , , w, s, e, n]) =>
+        ({ type: 'Feature', properties: { name }, geometry: { type: 'Point', coordinates: [(w + e) / 2, s] } })) };
+      map.getSource('ski-names')?.setData(_skiNames);
+      return areas;
+    });
+  }
+  const _skiLoaded = new Map();   // key → features
+  function loadSkiArea(key) {
+    return _cache.cached(`ski:${key}`, async () => {
+      const fc = await MCO.fetchJSON(`${SKI_ROOT}/runs/${key}.json`);
+      if (!_skiLoaded.has(key)) {
+        _skiLoaded.set(key, fc.features);
+        _skiData = { type: 'FeatureCollection', features: [..._skiLoaded.values()].flat() };
+        map.getSource('ski')?.setData(_skiData);
+      }
+      return fc;
+    });
+  }
+
+  // On every move: load the areas in view. A failed fetch is evicted and
+  // tried again on the next move.
+  async function updateSki() {
+    if (map.getZoom() < SKI_MIN_ZOOM) return;
+    let areas;
+    try { areas = await loadSkiIndex(); } catch { return; }
+    if (map.getZoom() < SKI_MIN_ZOOM) return;
+    const b = map.getBounds();
+    const inView = areas.filter(([, , , , w, s, e, n, runs]) =>
+      runs && w <= b.getEast() && e >= b.getWest() && s <= b.getNorth() && n >= b.getSouth());
+    for (const a of inView) loadSkiArea(a[0]).catch(() => {});
+  }
+
+  // The trail signs, drawn once per style (a style swap drops its images):
+  // e a green circle, i a blue square, a a black diamond, x two, each ringed
+  // in white.
+  function skiSignCanvas(d, s) {
+    const c = document.createElement('canvas');
+    c.width = d === 'x' ? Math.round(s * 1.7) : s;
+    c.height = s;
+    const x = c.getContext('2d');
+    const lw = s / 8, r = s / 2 - lw / 2;
+    x.lineWidth = lw; x.lineJoin = 'round';
+    x.strokeStyle = '#ffffff'; x.fillStyle = SKI_COLORS[d];
+    const shape = (cx) => {
+      x.beginPath();
+      if (d === 'e') x.arc(cx, s / 2, r, 0, 2 * Math.PI);
+      else if (d === 'i') x.rect(cx - r * 0.8, s / 2 - r * 0.8, r * 1.6, r * 1.6);
+      else { x.moveTo(cx, s / 2 - r); x.lineTo(cx + r, s / 2); x.lineTo(cx, s / 2 + r); x.lineTo(cx - r, s / 2); x.closePath(); }
+      x.fill(); x.stroke();
+    };
+    if (d === 'x') { shape(s / 2); shape(c.width - s / 2); } else shape(s / 2);
+    return c;
+  }
+  function addSkiSigns() {
+    const ratio = 2;
+    for (const d of ['e', 'i', 'a', 'x']) {
+      if (map.hasImage(`ski-${d}`)) continue;
+      const c = skiSignCanvas(d, SKI_SIGN_PX * ratio);
+      map.addImage(`ski-${d}`, c.getContext('2d').getImageData(0, 0, c.width, c.height), { pixelRatio: ratio });
+    }
+  }
+
   // ── Search ────────────────────────────────────────────────────────────────
   // One field over states, counties, cities and ZIP codes (data/places/,
-  // built from the Census Gazetteer by scripts/build-places.sh) and the
-  // watersheds the app already loads. The combobox and its ranking are the
-  // kit's (MCO.initSearchBox, MCO.searchModel sections); the collapse below
+  // built from the Census Gazetteer by scripts/build-places.sh), ski areas
+  // (data/ski/, above) and the watersheds the app already loads. The
+  // combobox and its ranking are the kit's (MCO.initSearchBox,
+  // MCO.searchModel sections); the collapse below
   // 640px is MCO.initSearchCollapse. A pick moves the camera only: the plot
   // dialog still opens from a deliberate click.
   //
   // Point results stop at SEARCH_POINT_ZOOM, where a town shows with its
   // valley or range around it, so the reader keeps the region. Areas fit
-  // their bounds, no closer than SEARCH_AREA_MAX_ZOOM.
+  // their bounds, no closer than SEARCH_AREA_MAX_ZOOM. A ski area fits its
+  // runs, between SKI_MIN_ZOOM (so they draw) and SEARCH_SKI_MAX_ZOOM; one
+  // OSM maps only as a point stops at SEARCH_SKI_POINT_ZOOM.
   const SEARCH_POINT_ZOOM    = 9;
   const SEARCH_AREA_MAX_ZOOM = 10;
+  const SEARCH_SKI_MAX_ZOOM  = 14;
+  const SEARCH_SKI_POINT_ZOOM = 12;
   const PLACES_ROOT = 'data/places';
   const PLACE_KIND  = { c: 'City', t: 'Town', v: 'Village', b: 'Borough', p: 'Community' };
   // Section order is list order: what people most often type first.
-  const SECTIONS = ['States', 'Cities and towns', 'Counties', 'Watersheds', 'ZIP codes'];
+  const SECTIONS = ['States', 'Cities and towns', 'Ski areas', 'Counties', 'Watersheds', 'ZIP codes'];
   const searchInput     = document.getElementById('search-input');
   const btnSearchToggle = document.getElementById('btn-search-toggle');
   const normalize = MCO.searchModel.normalize;
@@ -1898,7 +2055,7 @@
   // Each source is loaded once, on first use; when one arrives the open
   // list refreshes. A failure is evicted (promiseCache), so the next
   // keystroke retries.
-  const _searchItems = { States: [], 'Cities and towns': [], Counties: [], Watersheds: [], 'ZIP codes': [] };
+  const _searchItems = { States: [], 'Cities and towns': [], 'Ski areas': [], Counties: [], Watersheds: [], 'ZIP codes': [] };
   function loadAreasAndPlaces() {
     return _cache.cached('search:places', async () => {
       const [areas, places] = await Promise.all([
@@ -1921,6 +2078,17 @@
       const zips = await MCO.fetchJSON(`${PLACES_ROOT}/zips.json`);
       _searchItems['ZIP codes'] = zips.map(([zip, lat, lon]) =>
         searchItem('ZIP codes', zip, 'ZIP code', [], { point: [lon, lat] }));
+      searchBox.refresh();
+    });
+  }
+  // Ski areas by name, with their state or province (code and name).
+  // Unnamed ones still draw, but there is nothing to search them by.
+  function loadSkiAreas() {
+    return _cache.cached('search:ski', async () => {
+      const areas = await loadSkiIndex();
+      _searchItems['Ski areas'] = areas.filter(a => a[1]).map(([key, name, st, region, w, s, e, n, runs]) =>
+        searchItem('Ski areas', `${name}, ${st}`, 'Ski area', [`${name} ${st}`, `${name} ${region}`],
+          w === e && s === n ? { point: [w, s], ski: key, runs } : { bbox: [[w, s], [e, n]], ski: key, runs }));
       searchBox.refresh();
     });
   }
@@ -1951,6 +2119,7 @@
   function loadSearchSources(q) {
     const fail = () => {};   // retried on the next keystroke
     loadAreasAndPlaces().catch(fail);
+    loadSkiAreas().catch(fail);
     loadWatersheds().catch(fail);
     if (/^\d/.test(q)) loadZips().catch(fail);   // ZIPs only once a digit is typed
   }
@@ -1975,9 +2144,9 @@
     listbox: document.getElementById('search-list'),
     items: searchCandidates,
     onSelect: goToSearchResult,
-    label: 'Places and watersheds',
+    label: 'Places, ski areas and watersheds',
     limit: 30,
-    sectionLimits: { States: 5, 'Cities and towns': 5, Counties: 5, Watersheds: 5, 'ZIP codes': 8 },
+    sectionLimits: { States: 5, 'Cities and towns': 5, 'Ski areas': 5, Counties: 5, Watersheds: 5, 'ZIP codes': 8 },
   });
   const searchCollapse = MCO.initSearchCollapse({
     wrap: document.getElementById('search-wrap'),
@@ -1996,7 +2165,11 @@
     }
   });
 
+  // Bumped on every change, so a ski area's outline that arrives after the
+  // reader has moved on is dropped.
+  let _searchHitSeq = 0;
   function setSearchHit(feature) {
+    _searchHitSeq++;
     _searchHit = feature ? { type: 'FeatureCollection', features: [feature] } : EMPTY_FC;
     map.getSource('search-hit')?.setData(_searchHit);
   }
@@ -2011,6 +2184,11 @@
     if (rail.isRail()) rail.close();
     else if (searchCollapse.isOpen()) searchCollapse.close();
 
+    if (rec.ski) {
+      goToSkiArea(rec, animate);
+      MCO.announce(`Zoomed to ${rec.label}`);
+      return;
+    }
     if (rec.huc) {
       const level = rec.huc.length;
       if (currentView === 'zonal' && level !== currentHucLevel) setHucLevel(level);
@@ -2023,6 +2201,25 @@
     if (rec.bbox) map.fitBounds(rec.bbox, { ...FIT_OPTS, padding: 40, maxZoom: SEARCH_AREA_MAX_ZOOM, animate });
     else map.easeTo({ center: rec.point, zoom: SEARCH_POINT_ZOOM, animate });
     MCO.announce(`Zoomed to ${rec.label}`);
+  }
+
+  // A ski area: its runs in view, close enough that they draw, and its
+  // outline once its file arrives (a dot when OSM maps it only as a point).
+  function goToSkiArea(rec, animate) {
+    if (rec.point) {
+      setSearchHit({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: rec.point } });
+      map.easeTo({ center: rec.point, zoom: SEARCH_SKI_POINT_ZOOM, animate });
+      return;
+    }
+    setSearchHit(null);
+    const cam = map.cameraForBounds(rec.bbox, { padding: 40, maxZoom: SEARCH_SKI_MAX_ZOOM });
+    map.easeTo({ center: cam.center, zoom: Math.max(cam.zoom, SKI_MIN_ZOOM), animate });
+    if (!rec.runs) return;
+    const seq = _searchHitSeq;
+    loadSkiArea(rec.ski).then((fc) => {
+      const outline = fc.features.find(f => f.properties.o);
+      if (outline && seq === _searchHitSeq) setSearchHit(outline);
+    }).catch(() => {});
   }
 
   // / jumps to the search from anywhere but another field. Gated by

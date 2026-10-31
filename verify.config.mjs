@@ -61,6 +61,8 @@ export default {
     { name: 'basin-dialog', query: '?date=2025-10-22&view=zonal&huc=4&basin=1002&plot=hypsomeswe', ready: plotShown },
     // Place search with its listbox open (the Gazetteer and the watersheds).
     { name: 'search-list', query: '?date=2026-02-15', ready: searchListOpen },
+    // Ski runs, lifts and names over Big Sky, close enough for the trail signs.
+    { name: 'ski-runs', query: '?date=2026-02-15&lng=-111.40&lat=45.28&zoom=13.5', ready: painted },
   ],
   exemptTargets: '',
   allowProblems: [],

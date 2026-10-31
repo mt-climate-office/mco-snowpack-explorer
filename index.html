@@ -417,7 +417,7 @@
          combobox/listbox roles and aria-*). Press / anywhere to jump here. -->
     <div class="mco-search mco-search-collapse" id="search-wrap">
       <span class="mco-search-icon" aria-hidden="true"></span>
-      <label for="search-input" class="sr-only">Search places and watersheds</label>
+      <label for="search-input" class="sr-only">Search places, ski areas and watersheds</label>
       <input type="search" id="search-input" class="mco-search-input" placeholder="Place, basin or ZIP">
       <kbd class="search-kbd" aria-hidden="true">/</kbd>
       <div class="mco-search-list" id="search-list" hidden></div>
@@ -645,9 +645,14 @@
     <div class="info-section">
       <h3>Using the explorer</h3>
       <ul>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><strong>Search</strong>. Type a state, county, watershed, city or ZIP code
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><strong>Search</strong>. Type a state, county, watershed, city, ski area or ZIP code
             to go there. Press <kbd>/</kbd> to jump to the search box (add <code>?kbd=off</code> to the address to turn
-            that key off). A city or ZIP code is marked with a dot, and a watershed is outlined.</li>
+            that key off). A city or ZIP code is marked with a dot, and a watershed is outlined, as is a ski area
+            where OpenStreetMap maps its boundary.</li>
+        <li><strong>Ski runs</strong>. Zoom in on a ski area to see its name, downhill runs and lifts. Closer in, each run
+            carries its trail sign: a green circle, blue square, black diamond or double black diamond, from easiest to
+            experts only.
+            Runs and ratings are as mapped in OpenStreetMap, and some areas are mapped only in part.</li>
         <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg></span><strong>Date</strong>. Pick a day, or step one day at a time with ▲ and ▼.</li>
         <li><strong>View</strong>. Gridded shows every 1&thinsp;km cell. Zonal averages over watersheds, from
             the smallest (HUC8 subbasins, the default) to the largest (HUC2 regions); choose the size with Level.</li>
@@ -699,6 +704,9 @@
       <h3>Data</h3>
       <p>Snow: <a href="https://nsidc.org/data/g02158" target="_blank" rel="noopener">NOAA SNODAS</a>.
          Watersheds: <a href="https://www.usgs.gov/national-hydrography/watershed-boundary-dataset" target="_blank" rel="noopener">USGS Watershed Boundary Dataset</a>.
+         Ski areas, runs and lifts: <a href="https://openskimap.org" target="_blank" rel="noopener">OpenSkiMap</a>,
+         from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>
+         (Open Database License).
          Normals, percentiles and plots are computed by the
          <a href="https://climate.umt.edu" target="_blank" rel="noopener">Montana Climate Office</a>.
          <strong>About this data</strong>, in the legend, lists the past years used for the date shown and

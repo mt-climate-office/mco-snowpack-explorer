@@ -20,6 +20,10 @@ in past years and colored with the U.S. Drought Monitor categories (D4 to W4).
   default), Fitted (`zig`) and Empirical (`ecdf`). The method is in
   [`normals/README.md`](https://data2.climate.umt.edu/snodas/normals/README.md)
   beside the data.
+- **Ski areas**: every operating downhill ski area in the SNODAS domain
+  (the Canadian Columbia basin's included) can be searched by name. From
+  zoom 11 its name, downhill runs and lifts draw over the snow, the runs with
+  their North American trail signs from zoom 13.
 - **Watershed plots**: in the zonal view, clicking a watershed opens its SWE or
   HypsomeSWE plot for the date and normals shown. The plots are rendered by the
   pipeline, not the page.
@@ -75,12 +79,21 @@ An old `?method=zig` or `?method=ecdf` link still opens on that flavor.
 - `data/snodas-domain.geojson`: the edge of the SNODAS grid, traced from its
   NoData mask (NOHRSC publishes no boundary file), outlined in the gridded
   view. `scripts/build-domain.sh` rebuilds it.
-- `data/places/`: what the search box finds besides watersheds. `areas.json`
+- `data/places/`: what the search box finds besides watersheds and ski areas. `areas.json`
   (states and counties, with their bounding boxes), `places.json` (cities,
   towns and Census-designated places) and `zips.json` (ZIP code areas), each
   as compact arrays, lower 48 and DC only. Built from the US Census 2026
   Gazetteer and 2025 cartographic boundaries (public domain) by
   `scripts/build-places.sh`. Watersheds come from the boundary files above.
+- `data/ski/`: the ski areas and their runs and lifts. `areas.json` lists
+  every operating area with downhill skiing whose middle falls inside the
+  SNODAS domain, with its bounds; `runs/{key}.json` holds one area's runs
+  (by difficulty), lifts and outline, fetched only when the map is zoomed in
+  over it. From [OpenSkiMap](https://openskimap.org)'s daily GeoJSON, ©
+  OpenStreetMap contributors, under the
+  [Open Database License](https://opendatacommons.org/licenses/odbl/); the
+  extract stays under the ODbL. `scripts/build-ski.sh` rebuilds it (about
+  1 GB of downloads).
 - `verify.config.mjs`: scenarios and probes for the house verify harness.
 
 The look, the controls and most behaviour come from the Montana Climate
@@ -119,3 +132,4 @@ connection.
 ## License
 
 [MIT](LICENSE). Copyright (c) 2025–present Montana Climate Office.
+`data/ski/` is © OpenStreetMap contributors under the ODbL (see Files).
