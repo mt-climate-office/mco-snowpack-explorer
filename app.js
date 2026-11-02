@@ -98,7 +98,10 @@
   const PERIOD_RE   = /^wy(\d{4}|por)-(\d{4})$/;
   // The role's period for water year wy, from a manifest when it covers wy.
   function rolePeriod(manifest, wy) {
-    const p = manifest?.roles?.[ROLE]?.period;
+    // `roles.{role}.period` (spec §8), or the last part of `normals.{role}`
+    // ("normals/wy2004-2026"), which is how the SNOTEL manifest gives it.
+    const p = manifest?.roles?.[ROLE]?.period
+      ?? String(manifest?.normals?.[ROLE] ?? '').split('/').pop();
     if (manifest?.water_year === wy && PERIOD_RE.test(p || '')) return p;
     return `wy${Math.max(ROLE_RULE.earliest, wy - ROLE_RULE.length)}-${wy - 1}`;
   }
