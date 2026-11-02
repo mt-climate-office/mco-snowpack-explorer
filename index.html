@@ -492,17 +492,17 @@
       <span class="control-label" aria-hidden="true">Normals</span>
       <fieldset class="seg-btns is-radio" id="flavor-btns">
         <legend class="sr-only">Normals</legend>
-        <label class="nav-btn seg-btn"><input type="radio" name="flavor" value="zig_smooth" checked>Smoothed</label>
-        <label class="nav-btn seg-btn"><input type="radio" name="flavor" value="zig">Fitted</label>
-        <label class="nav-btn seg-btn"><input type="radio" name="flavor" value="ecdf">Empirical</label>
+        <label class="nav-btn seg-btn"><input type="radio" name="flavor" value="smoothed" checked>Smoothed</label>
+        <label class="nav-btn seg-btn"><input type="radio" name="flavor" value="fitted">Fitted</label>
+        <label class="nav-btn seg-btn"><input type="radio" name="flavor" value="empirical">Empirical</label>
       </fieldset>
     </div>
     <div class="control-group select-group">
       <label class="control-label" for="flavor-select">Normals</label>
       <select class="nav-select" id="flavor-select" hidden>
-        <option value="zig_smooth">Smoothed</option>
-        <option value="zig">Fitted</option>
-        <option value="ecdf">Empirical</option>
+        <option value="smoothed">Smoothed</option>
+        <option value="fitted">Fitted</option>
+        <option value="empirical">Empirical</option>
       </select>
     </div>
   </div>
@@ -650,9 +650,9 @@
         <span class="control-label" aria-hidden="true">Normals</span>
         <fieldset class="seg-btns is-radio" id="station-flavor-btns">
           <legend class="sr-only">Normals</legend>
-          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="zig_smooth" checked>Smoothed</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="zig">Fitted</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="ecdf">Empirical</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="smoothed" checked>Smoothed</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="fitted">Fitted</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="empirical">Empirical</label>
         </fieldset>
       </div>
     </div>
@@ -849,9 +849,9 @@
         <span class="control-label" aria-hidden="true">Normals</span>
         <fieldset class="seg-btns is-radio" id="basin-flavor-btns">
           <legend class="sr-only">Normals</legend>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="zig_smooth" checked>Smoothed</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="zig">Fitted</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="ecdf">Empirical</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="smoothed" checked>Smoothed</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="fitted">Fitted</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="empirical">Empirical</label>
         </fieldset>
       </div>
       <div class="control-group">
@@ -862,13 +862,13 @@
           <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="hypsomeswe">HypsomeSWE</label>
         </fieldset>
       </div>
-      <!-- Shown once the list of animated snow years has loaded; the select
+      <!-- Shown once the list of animated water years has loaded; the select
            only when there is more than one to choose from. -->
       <div class="control-group" id="basin-anim-group" hidden>
         <span class="control-label" aria-hidden="true">Animation</span>
         <div class="basin-anim-ctl">
-          <select class="nav-select" id="basin-sy" aria-label="Snow year to animate" hidden></select>
-          <button type="button" class="nav-btn" id="btn-basin-anim" aria-pressed="false">Play snow year</button>
+          <select class="nav-select" id="basin-sy" aria-label="Water year to animate" hidden></select>
+          <button type="button" class="nav-btn" id="btn-basin-anim" aria-pressed="false">Play water year</button>
         </div>
       </div>
     </div>

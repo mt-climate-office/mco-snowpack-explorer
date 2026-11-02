@@ -20,9 +20,9 @@ dist/
 
 # Ephemeral verification tooling (MIGRATING.md § verification recipe).
 # Installed with `npm i --no-save`, run before a deploy, never committed —
-# the app itself ships no build step and no dependencies.
+# the app itself ships no build step and no dependencies. (verify.mjs, the
+# layout v1 check, is committed; its tools are not.)
 node_modules/
 package.json
 package-lock.json
-verify.mjs
 verify-out/

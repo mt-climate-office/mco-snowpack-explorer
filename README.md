@@ -16,8 +16,8 @@ in past years and colored with the U.S. Drought Monitor categories (D4 to W4).
 - **Zonal**: the percentile of each watershed's mean SWE, for USGS Watershed
   Boundary Dataset units at HUC2, HUC4, HUC6 and HUC8.
 - **Normals**: the past years are turned into a range of normal snow in one of
-  three ways, which the page can switch between: Smoothed (`zig_smooth`, the
-  default), Fitted (`zig`) and Empirical (`ecdf`). The method is in
+  three ways, which the page can switch between: Smoothed (`smoothed`, the
+  default), Fitted (`fitted`) and Empirical (`empirical`). The method is in
   [`normals/README.md`](https://data2.climate.umt.edu/snodas/normals/README.md)
   beside the data.
 - **SNOTEL stations**: turned on with the SNOTEL button in the bar, every NRCS SNOTEL station
@@ -44,20 +44,42 @@ the [mco-snodas](https://github.com/mt-climate-office/mco-snodas) pipeline (a
 private repository; its `s3-docs/` are published as READMEs in the bucket).
 The SNOTEL stations are read from `https://data2.climate.umt.edu/snotel/`,
 written by [mco-snotel](https://github.com/mt-climate-office/mco-snotel)
-(stations, the water year's observed percentiles, per-station normals and
-plots, as its `CONSUMERS.md` describes).
+(stations, the water year's percentiles, per-station normals and plots, as
+its `CONSUMERS.md` describes).
 The page has no backend.
+
+Both buckets are read in their **layout v1** (mco-snotel's
+`docs/bucket-layout.md`). Keys are by normals **period**, `wy{first}-{last}`,
+and **flavor**, `smoothed`, `fitted` or `empirical`. The page reads the
+`snodas` role's period, whose reference years are the SNODAS normals'. For
+the current water year it takes the period from the latest manifests. For any
+other year it uses the role's rule: the 30 water years before it, from WY2004.
+For WY2027 that is `wy2004-2026`. `{day}` is the date's `MM-DD`.
 
 | What | Path under `snodas/` |
 |---|---|
-| Newest published date | `latest/manifest.json` (`date`) |
-| Gridded percentiles (COG, 0–100) | `normals/gridded/{flavor}/{date}/{date}_{flavor}_swe_ptile.tif` |
-| Normals provenance | `normals/gridded/{flavor}/{date}/{date}_{flavor}_provenance.json` |
-| Watershed percentiles and normals (Parquet) | `normals/zonal/wbd/{flavor}/{date}/{date}_{flavor}_swe_normals.parquet` |
-| Elevation-band table (Parquet) | `normals/zonal/wbd/{flavor}/{date}/{date}_{flavor}_hypsomeswe_normals.parquet` |
-| Watershed boundaries (FlatGeobuf) | `cache/data/fgb/huc{2,4,6,8}.fgb` |
-| Watershed plots (PNG) | `plots/{date}/{flavor}/{swe,hypsomeswe}/usdm/{huc}.png` |
-| A date's plots are complete | `plots/{date}/index.json` |
+| Newest published date and current period | `gridded/daily/latest/manifest.json` and `zonal/daily/latest/manifest.json` (`date`, `roles.snodas.period`; the earlier date wins) |
+| Gridded percentiles (COG, 0–100) | `gridded/daily/percentiles/{period}/{date}/{period}_{flavor}_{date}_swe_ptile.tif` |
+| Median for the date, for the hover (COG) | `gridded/normals/{period}/{flavor}/{period}_{flavor}_{day}_median.tif` |
+| SNODAS SWE, for the hover (COG) | `raw/cog/{date}/snodas_swe_{date}.tif` |
+| Normals provenance | `gridded/normals/{period}/provenance_{period}.json` |
+| Watershed percentiles and normals (Parquet) | `zonal/daily/zones/{period}/{date}/zones_swe_{period}_{flavor}_{date}.parquet` |
+| Elevation-band table (Parquet) | `zonal/daily/zones/{period}/{date}/zones_hypsomeswe_{period}_{flavor}_{date}.parquet` |
+| Watershed boundaries (FlatGeobuf) | `zonal/zones_huc{2,4,6,8}.fgb` |
+| Watershed plots (PNG) | `zonal/daily/plots/{period}/{date}/{flavor}/{huc}_{swe,hypsomeswe}_{period}_{flavor}_{date}.png` |
+| A date's plots are complete | `zonal/daily/plots/{period}/{date}/index_{period}_{date}.json` |
+| Which dates have plots | listing of `zonal/daily/plots/{period}/` |
+| Water-year animations (MP4) | `zonal/animations/{period}/wy{wy}/{flavor}/{huc}_hypsomeswe_{period}_{flavor}_wy{wy}.mp4`, found by listing `zonal/animations/` and each period in it |
+
+| What | Path under `snotel/` |
+|---|---|
+| Newest date, water year and current period | `daily/latest/manifest.json` (`date`, `water_year`, `roles.snodas.period`) |
+| Stations | `stations.parquet` |
+| The water year's percentiles | `daily/latest/percentiles_snodas.parquet` for the current water year, `daily/percentiles/{period}/percentiles_{period}_wy{wy}.parquet` for others |
+| A station's normals | `normals/{period}/by_station/{station}_{period}.parquet` |
+| Station plots (PNG) | `daily/plots/{period}/{date}/{flavor}/{station}_swe_{period}_{flavor}_{date}.png` |
+| A date's plots are complete | `daily/plots/{period}/{date}/index_{period}_{date}.json` |
+| Which dates have plots | listing of `daily/plots/{period}/` |
 
 Percentiles start on 2025-09-01, the first day of the first snow year the
 normals pipeline has built. Plots are not published for every date yet; the
@@ -73,7 +95,7 @@ are left out of the URL.
 | `date` | `YYYY-MM-DD` | the newest published date (always written) |
 | `view` | `gridded`, `zonal` | `gridded` |
 | `huc` | `8`, `6`, `4`, `2` (zonal view only) | `8` |
-| `flavor` | `zig_smooth`, `zig`, `ecdf` | `zig_smooth` |
+| `flavor` | `smoothed`, `fitted`, `empirical` | `smoothed` |
 | `basin` | a HUC code, e.g. `1002`; opens its plot dialog | none |
 | `plot` | `swe`, `hypsomeswe` (with `basin`) | `swe` |
 | `lng`, `lat`, `zoom` | the camera | the lower 48 |
@@ -83,7 +105,10 @@ are left out of the URL.
 | `station` | a station, e.g. `901_MT_SNTL`; opens its plot dialog (and shows the stations) | none |
 | `kbd` | `off`: turn off the `/` shortcut to the search box | on |
 
-An old `?method=zig` or `?method=ecdf` link still opens on that flavor.
+An old `?method=zig` or `?method=ecdf` link still opens on that flavor, as
+does an old `?flavor=zig_smooth`, `zig` or `ecdf`; the URL is rewritten with
+the new name. `anim` is a water year (October to September), as the
+animations are.
 
 ## Files
 
@@ -110,6 +135,7 @@ An old `?method=zig` or `?method=ecdf` link still opens on that flavor.
   extract stays under the ODbL. `scripts/build-ski.sh` rebuilds it (about
   1 GB of downloads).
 - `verify.config.mjs`: scenarios and probes for the house verify harness.
+- `verify.mjs`: checks the page against the snow buckets' layout v1 (below).
 
 The look, the controls and most behaviour come from the Montana Climate
 Office's shared design system,
@@ -143,6 +169,32 @@ node tools/verify/keyboard.mjs   --config ../mco-snowpack-explorer/verify.config
 
 The browser checks run against live data on data2, so they need a network
 connection.
+
+### Against the buckets' layout v1
+
+`verify.mjs` checks two things. First, that every layout v1 key the page
+reads for the newest date exists. Second, that the page, served from this
+checkout, works against that data. It must draw the gridded and zonal maps,
+a basin's plots, facts and band table, an animation, the SNOTEL stations and
+a station's plot. It must also make no request to an old key and fail no
+request.
+
+The data can come from production, a test bucket or a local mirror laid out
+as the bucket. Its two tools are pinned and not saved to the repository:
+
+```sh
+npm i --no-save playwright@1.62.1 @axe-core/playwright@4.13.0
+npx playwright install chromium
+node verify.mjs                                    # production, data2
+node verify.mjs --data /path/to/mirror             # a mirror holding snodas/ and snotel/
+node verify.mjs --snodas https://<bucket-base> --snotel https://<bucket-base>
+node verify.mjs --list                             # print the keys it reads, and stop
+node verify.mjs --keys-only                        # the keys, not the page
+```
+
+`--basin`, `--station` and `--anim` choose what to open. The defaults are
+`1002`, `901_MT_SNTL` and the newest animated water year. A bucket URL's S3
+listing must be public, as data2's is. Screenshots go to `verify-out/`.
 
 ## License
 

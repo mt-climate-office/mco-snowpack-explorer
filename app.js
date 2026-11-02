@@ -38,9 +38,10 @@
   // Backup: data2's CloudFront default domain serves the same paths. Swap it in
   // if data2's certificate lapses again (the CSP already allows both).
   // const DATA_HOST  = 'https://d1s8jav5n0eyyf.cloudfront.net';
-  const S3_ROOT    = `${DATA_HOST}/snodas/normals/gridded`;
-  const FGB_ROOT   = `${DATA_HOST}/snodas/cache/data/fgb`;
-  const ZONAL_ROOT = `${DATA_HOST}/snodas/normals/zonal/wbd`;
+  // mco-snodas's bucket, read in its layout v1 (mco-snotel
+  // docs/bucket-layout.md and the layout v1 contract). Keys are by normals
+  // period (e.g. wy2004-2026) and flavor (empirical, fitted, smoothed).
+  const SNODAS_ROOT = `${DATA_HOST}/snodas`;
   const BREAKS  = [0, 2, 5, 10, 20, 30, 70, 80, 90, 95, 98];
   // U.S. Drought Monitor categories, paired 1:1 with BREAKS and COLORS. These
   // are NOT decoration: the ramp is hue-only by design, so D4 (exceptional
@@ -71,16 +72,41 @@
   // Step thresholds + colors for HUC fill expressions (mirrors the COG colormap)
   const HUC_COLOR_STOPS = BREAKS.slice(1).flatMap((b, i) => [b, `rgb(${COLORS[i + 1]})`]);
 
-  // The three normals flavors mco-snodas publishes, keyed by their path
-  // segment. `short` labels the control, `name` everything a person reads.
-  // Smoothed is the default: the steadiest through the season.
+  // The three normals flavors mco-snodas publishes, keyed by their name in
+  // keys and in tables' `flavor` column. `short` labels the control, `name`
+  // everything a person reads. Smoothed is the default: the steadiest
+  // through the season.
   const FLAVORS = {
-    zig_smooth: { short: 'Smoothed',  name: 'Smoothed normals' },
-    zig:        { short: 'Fitted',    name: 'Fitted normals' },
-    ecdf:       { short: 'Empirical', name: 'Empirical normals' },
+    smoothed:  { short: 'Smoothed',  name: 'Smoothed normals' },
+    fitted:    { short: 'Fitted',    name: 'Fitted normals' },
+    empirical: { short: 'Empirical', name: 'Empirical normals' },
   };
-  const DEFAULT_FLAVOR = 'zig_smooth';
+  const DEFAULT_FLAVOR = 'smoothed';
+  // Their names before layout v1, still accepted in a link and in a plot
+  // index copied from the old layout.
+  const OLD_FLAVOR = { zig_smooth: 'smoothed', zig: 'fitted', ecdf: 'empirical' };
   const flavorName = (f = currentFlavor) => FLAVORS[f].name;
+
+  // Normals periods. Every key is by period, and the period for a date is
+  // its role's period for the date's water year. The latest manifests say
+  // it for the current water year; for any other year it is the role's rule
+  // (docs/bucket-layout.md §5: `snodas` is the 30 years before the water
+  // year, from WY2004), which both buckets configure identically.
+  const ROLE        = 'snodas';
+  const ROLE_RULE   = { length: 30, earliest: 2004 };
+  const waterYear   = (d) => +d.slice(0, 4) + (+d.slice(5, 7) >= 10 ? 1 : 0);
+  const PERIOD_RE   = /^wy(\d{4}|por)-(\d{4})$/;
+  // The role's period for water year wy, from a manifest when it covers wy.
+  function rolePeriod(manifest, wy) {
+    // `roles.{role}.period` (spec §8), or the last part of `normals.{role}`
+    // ("normals/wy2004-2026"), which is how the SNOTEL manifest gives it.
+    const p = manifest?.roles?.[ROLE]?.period
+      ?? String(manifest?.normals?.[ROLE] ?? '').split('/').pop();
+    if (manifest?.water_year === wy && PERIOD_RE.test(p || '')) return p;
+    return `wy${Math.max(ROLE_RULE.earliest, wy - ROLE_RULE.length)}-${wy - 1}`;
+  }
+  // [first, last] reference water years of a period key.
+  const periodYears = (p) => { const m = PERIOD_RE.exec(p || ''); return m ? [m[1], m[2]] : null; };
 
   const VIEWS      = ['gridded', 'zonal'];
   const HUC_LEVELS = [2, 4, 6, 8];
@@ -93,10 +119,12 @@
   // The pipeline's pointer to the newest published date. Fetched first, in
   // parallel with MapLibre, so the page opens on a day that exists instead of
   // probing today's (usually unpublished) file. Null when it can't be read;
-  // the date probe below still works without it.
-  const LATEST_URL = `${DATA_HOST}/snodas/latest/manifest.json`;
-  const _latestP = MCO.fetchJSON(LATEST_URL, { cache: 'no-cache' })
-    .then(m => (/^\d{4}-\d{2}-\d{2}$/.test(m && m.date) ? m.date : null))
+  // the date probe below still works without it. There are two, gridded and
+  // zonal; the page opens on the earlier date if they differ, and takes the
+  // current period from that manifest.
+  const LATEST_URLS = ['gridded', 'zonal'].map(k => `${SNODAS_ROOT}/${k}/daily/latest/manifest.json`);
+  const _latestP = Promise.all(LATEST_URLS.map(u => MCO.fetchJSON(u, { cache: 'no-cache' }).catch(() => null)))
+    .then(ms => ms.filter(m => /^\d{4}-\d{2}-\d{2}$/.test(m && m.date)).sort((a, b) => a.date.localeCompare(b.date))[0] || null)
     .catch(() => null);
 
   // ── MapLibre 6 ───────────────────────────────────────────────────────────
@@ -150,18 +178,23 @@
 
   // The newest date there is data for: the manifest's, or today (Mountain
   // time) when the manifest can't be read.
-  let latestDate = (await _latestP) || MCO.todayMT();
+  const snodasManifest = await _latestP;
+  let latestDate = snodasManifest?.date || MCO.todayMT();
+  // The SNODAS normals period a date is read against.
+  const periodFor = (d) => rolePeriod(snodasManifest, waterYear(d));
   const askedDate = isIsoDate(urlParams.get('date')) ? urlParams.get('date') : null;
   let currentDate     = askedDate || latestDate;
   let currentView     = VIEWS.includes(getLower('view')) ? getLower('view') : 'gridded';
   // HUC8, the finest level, is the zonal view's default.
   const DEFAULT_HUC = 8;
   let currentHucLevel = (() => { const v = parseInt(urlParams.get('huc'), 10); return HUC_LEVELS.includes(v) ? v : DEFAULT_HUC; })();
-  // ?method=zig|ecdf is how the flavor was spelled before it had a control;
-  // an old link still lands on the flavor it named.
-  let currentFlavor = FLAVORS[getLower('flavor')] ? getLower('flavor')
-                    : ['zig', 'ecdf'].includes(getLower('method')) ? getLower('method')
-                    : DEFAULT_FLAVOR;
+  // ?method=zig|ecdf is how the flavor was spelled before it had a control,
+  // and ?flavor=zig_smooth|zig|ecdf before layout v1; an old link still
+  // lands on the flavor it named.
+  const asFlavor = (v) => (FLAVORS[v] ? v : OLD_FLAVOR[v] || null);
+  let currentFlavor = asFlavor(getLower('flavor'))
+                    || (['zig', 'ecdf'].includes(getLower('method')) ? OLD_FLAVOR[getLower('method')] : null)
+                    || DEFAULT_FLAVOR;
   if (currentDate < SNODAS_START) currentDate = SNODAS_START;
   if (currentDate > latestDate)   currentDate = latestDate;
 
@@ -204,10 +237,17 @@
   }
 
   // URL builders
-  const cogUrl        = (d, m = currentFlavor) => `${S3_ROOT}/${m}/${d}/${d}_${m}_swe_ptile.tif`;
-  const fgbUrl        = lvl   => `${FGB_ROOT}/huc${lvl}.fgb`;
-  const zonalUrl      = (d, m = currentFlavor) => `${ZONAL_ROOT}/${m}/${d}/${d}_${m}_swe_normals.parquet`;
-  const provenanceUrl = (d, m = currentFlavor) => `${S3_ROOT}/${m}/${d}/${d}_${m}_provenance.json`;
+  // percentile_grid, subjects (one file per HUC level), zonal_day and
+  // provenance_grid.
+  const cogUrl = (d, m = currentFlavor) => { const p = periodFor(d);
+    return `${SNODAS_ROOT}/gridded/daily/percentiles/${p}/${d}/${p}_${m}_${d}_swe_ptile.tif`; };
+  const fgbUrl = lvl => `${SNODAS_ROOT}/zonal/zones_huc${lvl}.fgb`;
+  const zonalUrl = (d, m = currentFlavor, type = 'swe') => { const p = periodFor(d);
+    return `${SNODAS_ROOT}/zonal/daily/zones/${p}/${d}/zones_${type}_${p}_${m}_${d}.parquet`; };
+  // Provenance is per flavor and day (MM-DD) until normals 2.1 gives one
+  // file per period.
+  const provenanceUrl = (d, m = currentFlavor) => { const p = periodFor(d);
+    return `${SNODAS_ROOT}/gridded/normals/${p}/${m}/provenance_${p}_${m}_${d.slice(5)}.json`; };
 
   async function cogExists(d, url = cogUrl(d)) {
     try {
@@ -360,11 +400,32 @@
   });
 
   // ── Provenance ────────────────────────────────────────────────────────────
-  // Cached per date and flavor; a failed fetch is evicted, so a later open
-  // tries again, and resolves to null for the callers.
+  // One file per normals period (layout v1), cached per period; a failed
+  // fetch is evicted, so a later open tries again, and resolves to null for
+  // the callers. What the page shows is for a date and flavor: the normals
+  // for d's day of the year, from the same day in each of the period's
+  // water years (Feb 29 reads Feb 28's in a common year), so the reference
+  // dates follow from the period and the file adds when it was built.
   const _cache = MCO.promiseCache();
+  function referenceDates(d) {
+    const [first, last] = (periodYears(periodFor(d)) || []).map(Number);
+    if (!first) return [];
+    const md = d.slice(5), out = [];
+    for (let wy = first; wy <= last; wy++) {
+      const y = +md.slice(0, 2) >= 10 ? wy - 1 : wy;
+      const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+      out.push(`${y}-${md === '02-29' && !leap ? '02-28' : md}`);
+    }
+    return out;
+  }
   function fetchProvenance(d, m = currentFlavor) {
-    return _cache.cached(`prov:${d}_${m}`, () => MCO.fetchJSON(provenanceUrl(d, m))).catch(() => null);
+    return _cache.cached(`prov:${periodFor(d)}:${m}:${d.slice(5)}`, () => MCO.fetchJSON(provenanceUrl(d, m)))
+      .then((raw) => {
+        const reference_dates = referenceDates(d);
+        return { normals_date: d, flavor: m, reference_dates, n_reference_years: reference_dates.length,
+                 computed_at: raw.computed_at ?? raw.built_at ?? null };
+      })
+      .catch(() => null);
   }
 
   function refRange(prov) {
@@ -1125,8 +1186,8 @@
     const v = (params.get('view') || 'gridded').toLowerCase();
     const lvl = parseInt(params.get('huc'), 10);
     if (HUC_LEVELS.includes(lvl)) setHucLevel(lvl, { silent: true });
-    const f = (params.get('flavor') || DEFAULT_FLAVOR).toLowerCase();
-    if (FLAVORS[f]) setFlavor(f, { silent: true });
+    const f = asFlavor((params.get('flavor') || DEFAULT_FLAVOR).toLowerCase());
+    if (f) setFlavor(f, { silent: true });
     if (VIEWS.includes(v)) setView(v, { silent: true });
     const t = (params.get('plot') || DEFAULT_PLOT).toLowerCase();
     if (PLOT_TYPES[t]) setPlotType(t, { silent: true });
@@ -1152,11 +1213,13 @@
   const tooltip = document.getElementById('tooltip');
   let _hoverSeq = 0;
 
-  // The daily SNODAS SWE grid (int16 mm, the percentile COGs' grid), and the
-  // normal's median for the date (int16 mm; the q0500 band of the quantiles
-  // COG, published on its own by mco-snodas for point queries).
-  const sweCogUrl    = (d) => `${DATA_HOST}/snodas/cogs/${d}/snodas_swe_${d.replace(/-/g, '')}.tif`;
-  const medianCogUrl = (d, m = currentFlavor) => `${S3_ROOT}/${m}/${d}/${d}_${m}_median.tif`;
+  // The daily SNODAS SWE grid (int16 mm, the percentile COGs' grid; raw_cog),
+  // and the normal's median for the date's day of the year (int16 mm; the
+  // q0500 band of the quantiles COG, published on its own by mco-snodas for
+  // point queries; normals_grid, keyed by period and MM-DD).
+  const sweCogUrl    = (d) => `${SNODAS_ROOT}/raw/cog/${d}/snodas_swe_${d}.tif`;
+  const medianCogUrl = (d, m = currentFlavor) => { const p = periodFor(d);
+    return `${SNODAS_ROOT}/gridded/normals/${p}/${m}/${p}_${m}_${d.slice(5)}_median.tif`; };
   // Whether that median exists, asked once per date and flavor: dates built
   // before it was published have none, and the kit's reader would otherwise
   // re-request the missing file on every pointer move.
@@ -1257,14 +1320,14 @@
 
   // ── Basin dialog ──────────────────────────────────────────────────────────
   // One watershed's SWE or HypsomeSWE plot, the PNGs mco-snodas renders per
-  // date, flavor and HUC (plots/{date}/{flavor}/{type}/usdm/{huc}.png, with
-  // plots/{date}/index.json written last as the "date complete" marker).
+  // period, date, flavor and HUC (zonal/daily/plots/{period}/{date}/{flavor}/
+  // {huc}_{type}_{period}_{flavor}_{date}.png, with the period's
+  // index_{period}_{date}.json written last as the "date complete" marker).
   // The dialog has no state of its own beyond the basin and the plot type:
   // its date and normals controls call the page's setDate / setFlavor, and
   // those setters update every control bound to them, so the dialog and the
   // map behind it can't drift apart.
-  const PLOTS_ROOT = `${DATA_HOST}/snodas/plots`;
-  const PLOT_STYLE = 'usdm';
+  const plotsRoot = (p) => `${SNODAS_ROOT}/zonal/daily/plots/${p}`;
   const basinModal    = document.getElementById('basin-modal');
   const basinCtl      = MCO.initInfoModal({ dialog: basinModal });
   const basinTitle    = document.getElementById('basin-title');
@@ -1320,26 +1383,36 @@
   }
 
   // ── Snow-year animations ──
-  // Every day's HypsomeSWE plot for one snow year (1 September – 31 August,
+  // Every day's HypsomeSWE plot for one water year (1 October – 30 September,
   // named for the year it ends) as one MP4 per flavor and HUC, which
-  // mco-snodas publishes at animations/sy{year}/{flavor}/hypsomeswe/usdm/
-  // {huc}.mp4. Which years exist comes from one listing of animations/; the
-  // control appears once it has, and starts on the newest snow year that
-  // has ended by the latest date with data. The year runs in the select only
-  // when there is more than one to choose.
-  const ANIM_ROOT = `${DATA_HOST}/snodas/animations`;
-  const animUrl = (sy, flavor, huc) => `${ANIM_ROOT}/sy${sy}/${flavor}/hypsomeswe/${PLOT_STYLE}/${huc}.mp4`;
-  const snowYearSpan = (sy) => `${MCO.formatDateStr(`${sy - 1}-09-01`)} – ${MCO.formatDateStr(`${sy}-08-31`)}`;
+  // mco-snodas publishes at zonal/animations/{period}/wy{year}/{flavor}/
+  // {huc}_hypsomeswe_{period}_{flavor}_wy{year}.mp4. Which years exist comes
+  // from listing zonal/animations/ and each period in it; the control
+  // appears once it has, and starts on the newest water year that has ended
+  // by the latest date with data. The year runs in the select only when
+  // there is more than one to choose. (`sy` below is that year: the
+  // variable names are from when the animations ran by snow year.)
+  const ANIM_ROOT = `${SNODAS_ROOT}/zonal/animations`;
+  const _animPeriod = new Map();   // water year → its period, from the listing
+  const animUrl = (sy, flavor, huc) => { const p = _animPeriod.get(sy) || rolePeriod(snodasManifest, sy);
+    return `${ANIM_ROOT}/${p}/wy${sy}/${flavor}/${huc}_hypsomeswe_${p}_${flavor}_wy${sy}.mp4`; };
+  const snowYearSpan = (sy) => `${MCO.formatDateStr(`${sy - 1}-10-01`)} – ${MCO.formatDateStr(`${sy}-09-30`)}`;
   function animYears() {
     return _cache.cached('anim:years', async () => {
-      const years = (await s3Prefixes('animations/'))
-        .map(p => /^animations\/sy(\d{4})\/$/.exec(p)?.[1]).filter(Boolean).map(Number);
-      return years.sort((a, b) => a - b);
+      const periods = (await s3Prefixes('zonal/animations/'))
+        .map(p => /^zonal\/animations\/(wy[^/]+)\/$/.exec(p)?.[1]).filter(Boolean);
+      for (const lists of await Promise.all(periods.map(p => s3Prefixes(`zonal/animations/${p}/`)))) {
+        for (const x of lists) {
+          const m = /^zonal\/animations\/(wy[^/]+)\/wy(\d{4})\/$/.exec(x);
+          if (m) _animPeriod.set(+m[2], m[1]);
+        }
+      }
+      return [..._animPeriod.keys()].sort((a, b) => a - b);
     }).catch(() => []);
   }
   animYears().then((years) => {
     if (!years.length) return;
-    const ended = years.filter(y => `${y}-08-31` <= latestDate);
+    const ended = years.filter(y => `${y}-09-30` <= latestDate);
     const dflt = ended.length ? ended[ended.length - 1] : years[years.length - 1];
     basinSy.replaceChildren(...years.slice().reverse().map(y => h('option', { value: String(y), textContent: String(y) })));
     basinSy.value = String(currentAnim && years.includes(currentAnim) ? currentAnim : dflt);
@@ -1349,7 +1422,7 @@
   });
   function syncAnimControls() {
     if (currentAnim && basinSy.querySelector(`option[value="${currentAnim}"]`)) basinSy.value = String(currentAnim);
-    basinAnimBtn.textContent = basinSy.hidden ? `Animate snow year ${basinSy.value}` : 'Animate snow year';
+    basinAnimBtn.textContent = basinSy.hidden ? `Animate water year ${basinSy.value}` : 'Animate water year';
     basinAnimBtn.setAttribute('aria-pressed', String(!!currentAnim));
   }
   basinAnimBtn.addEventListener('click', () => setAnim(currentAnim ? null : +basinSy.value));
@@ -1366,7 +1439,7 @@
     if (!currentBasin) return;
     if (!silent) {
       writeUrl();
-      MCO.announce(sy ? `Snow year ${sy} animation` : `${PLOT_TYPES[currentPlot]} plot`);
+      MCO.announce(sy ? `Water year ${sy} animation` : `${PLOT_TYPES[currentPlot]} plot`);
     }
     renderBasin();
   }
@@ -1382,7 +1455,7 @@
   }
 
   // ── Stepping the animation a day at a time ──
-  // Frame i is day i of the snow year (1 September first), at 12 frames a
+  // Frame i is day i of the water year (1 October first), at 12 frames a
   // second (animations/README.md). A step pauses and seeks to the middle of
   // its frame, clear of the rounding at either edge.
   const ANIM_FPS = 12;
@@ -1391,7 +1464,7 @@
   let _shownFrame = -1;
   const frameCount = () => (Number.isFinite(basinVideo.duration) ? Math.round(basinVideo.duration * ANIM_FPS) : 0);
   const frameAt    = () => Math.min(frameCount() - 1, Math.floor(basinVideo.currentTime * ANIM_FPS));
-  const frameDate  = (i) => MCO.shiftDate(`${currentAnim - 1}-09-01`, i);
+  const frameDate  = (i) => MCO.shiftDate(`${currentAnim - 1}-10-01`, i);
   const canStepFrame = (d) => {
     if (!currentAnim || basinVideo.hidden || !frameCount()) return false;
     const i = frameAt();
@@ -1465,14 +1538,14 @@
     // The animation's frames are the daily plots, so their data tables are
     // its text alternative, one date at a time.
     basinTable.replaceChildren(h('p', { textContent:
-      `The animation shows the HypsomeSWE plot for each day of snow year ${sy}, one day per frame. `
+      `The animation shows the HypsomeSWE plot for each day of water year ${sy}, one day per frame. `
       + 'Step through it a day at a time with the buttons under it or the left and right arrow keys. '
       + 'For the numbers behind any day, choose that date: its plot has a table of every elevation band.' }));
 
     if (!(await animExists(url))) {
       if (seq !== _basinSeq) return;
       basinFrame.removeAttribute('aria-busy');
-      showBasinEmpty(`There's no snow year ${sy} animation for ${name} against ${flavorName(flavor).toLowerCase()}.`,
+      showBasinEmpty(`There's no water year ${sy} animation for ${name} against ${flavorName(flavor).toLowerCase()}.`,
         { label: 'Show the SWE plot', onClick: () => setPlotType('swe'), focus: basinPlotFs.querySelector('input[value="swe"]') });
       return;
     }
@@ -1484,7 +1557,7 @@
         basinFrame.removeAttribute('aria-busy');
         // The files are H.265 (HEVC): Safari plays them, Chrome and Edge on
         // most hardware, Firefox mostly not. The download still works.
-        showBasinEmpty(`This browser can't play the snow year ${sy} animation for ${name}. Download it to watch it in a video player.`,
+        showBasinEmpty(`This browser can't play the water year ${sy} animation for ${name}. Download it to watch it in a video player.`,
           { label: 'Show the plot', onClick: () => setAnim(null), focus: basinAnimBtn });
         basinCaption.replaceChildren(h('a', { href: url, download: '', textContent: 'Download the animation (MP4)' }), '.');
         return;
@@ -1493,7 +1566,7 @@
     basinFrame.removeAttribute('aria-busy');
     basinImg.hidden = true;
     basinEmpty.hidden = true;
-    basinVideo.setAttribute('aria-label', `Animation of the daily HypsomeSWE plots for ${name} (HUC${level} ${huc}) through snow year ${sy}, against ${flavorName(flavor).toLowerCase()}.`);
+    basinVideo.setAttribute('aria-label', `Animation of the daily HypsomeSWE plots for ${name} (HUC${level} ${huc}) through water year ${sy}, against ${flavorName(flavor).toLowerCase()}.`);
     basinVideo.hidden = false;
     basinFrames.hidden = false;
     _shownFrame = -1;
@@ -1501,7 +1574,7 @@
     // Started by the visitor's own press, and never under reduced motion;
     // the native controls pause it either way (WCAG 2.2.2).
     if (!MCO.reducedMotion() && basinVideo.paused) basinVideo.play().catch(() => {});
-    basinCaption.replaceChildren(`HypsomeSWE · snow year ${sy}, ${snowYearSpan(sy)} · ${flavorName(flavor)}. `,
+    basinCaption.replaceChildren(`HypsomeSWE · water year ${sy}, ${snowYearSpan(sy)} · ${flavorName(flavor)}. `,
       h('a', { href: url, target: '_blank', rel: 'noopener', textContent: 'Open the full-size animation' }), '.');
   }
 
@@ -1562,12 +1635,17 @@
   });
 
   // ── Which dates have plots ──
-  // index.json is memoised per date, hits and misses alike. The list of
-  // dates comes from one anonymous S3 listing of plots/, cached for the
-  // session (mco-snodas publishes no catalog of plot dates yet).
+  // The plot index is memoised per date, hits and misses alike. The list of
+  // dates comes from one anonymous S3 listing of the period's plots,
+  // cached for the session (mco-snodas publishes no catalog of plot dates
+  // yet).
   function plotIndex(d) {
-    return _cache.cached(`plots:${d}`, () => MCO.fetchJSON(`${PLOTS_ROOT}/${d}/index.json`).catch(() => null));
+    const p = periodFor(d);
+    return _cache.cached(`plots:${d}`, () => MCO.fetchJSON(`${plotsRoot(p)}/${d}/index_${p}_${d}.json`).catch(() => null));
   }
+  // Whether an index lists a flavor (one copied from the old layout names
+  // it the old way).
+  const indexHasFlavor = (idx, f) => !Array.isArray(idx.flavors) || idx.flavors.some(x => asFlavor(x) === f);
   // The "folders" one level under prefix, from a bucket's anonymous listing
   // (snodas, or snotel for the station plots), every page of it.
   async function s3Prefixes(prefix, bucket = 'snodas') {
@@ -1585,16 +1663,18 @@
     } while (token);
     return out;
   }
-  function plotDates() {
-    return _cache.cached('plots:dates', async () => (await s3Prefixes('plots/'))
-      .map(p => /^plots\/(\d{4}-\d{2}-\d{2})\/$/.exec(p)?.[1]).filter(Boolean).sort()
+  // The dates with plots in d's period.
+  function plotDates(d) {
+    const p = periodFor(d), prefix = `zonal/daily/plots/${p}/`;
+    return _cache.cached(`plots:dates:${p}`, async () => (await s3Prefixes(prefix))
+      .map(x => (x.startsWith(prefix) ? /^(\d{4}-\d{2}-\d{2})\/$/.exec(x.slice(prefix.length))?.[1] : null)).filter(Boolean).sort()
     ).catch(() => []);
   }
-  // The closest date to d whose plots are complete (its index.json exists):
+  // The closest date to d whose plots are complete (its plot index exists):
   // the basins' by default, the stations' with their own two lookups.
   async function nearestPlotDate(d, { dates = plotDates, index = plotIndex } = {}) {
     const t = (x) => new Date(`${x}T12:00:00`).getTime();
-    const ranked = (await dates())
+    const ranked = (await dates(d))
       .filter(x => x !== d && x >= SNODAS_START && x <= latestDate)
       .sort((a, b) => Math.abs(t(a) - t(d)) - Math.abs(t(b) - t(d)));
     for (const x of ranked.slice(0, 5)) if (await index(x)) return x;
@@ -1615,8 +1695,8 @@
     }
     return _imgOk.get(url);
   }
-  const plotUrl = (idx, d, flavor, type, huc) => `${PLOTS_ROOT}/${d}/` + (idx.path || '{flavor}/{type}/{style}/{huc}.png')
-    .replace('{flavor}', flavor).replace('{type}', type).replace('{style}', PLOT_STYLE).replace('{huc}', huc);
+  const plotUrl = (d, flavor, type, huc) => { const p = periodFor(d);
+    return `${plotsRoot(p)}/${d}/${flavor}/${huc}_${type}_${p}_${flavor}_${d}.png`; };
 
   // ── Numbers for the text alternative and the table ──
   const fmtPtile = (v) => (v == null || Number.isNaN(v) ? '—' : `${ordinal(Math.round(v))} percentile`);
@@ -1648,7 +1728,7 @@
   function loadBands(date, flavor) {
     return _cache.cached(`bands:${date}_${flavor}`, async () => {
       const pq = await parquetLib();
-      const url = `${ZONAL_ROOT}/${flavor}/${date}/${date}_${flavor}_hypsomeswe_normals.parquet`;
+      const url = zonalUrl(date, flavor, 'hypsomeswe');
       const file = await pq.asyncBufferFromUrl({ url });
       const rows = await pq.parquetReadObjects({
         file, columns: BAND_COLUMNS,
@@ -1743,7 +1823,7 @@
     const row = zonal?.get(huc) ?? null;
     renderDataTable(row, seq);
 
-    if (!idx || (idx.flavors && !idx.flavors.includes(flavor))) {
+    if (!idx || !indexHasFlavor(idx, flavor)) {
       const near = await nearestPlotDate(date);
       if (seq !== _basinSeq) return;
       basinFrame.removeAttribute('aria-busy');
@@ -1752,7 +1832,7 @@
       return;
     }
 
-    const url = plotUrl(idx, date, flavor, type, huc);
+    const url = plotUrl(date, flavor, type, huc);
     const ok = await loadImage(url);
     if (seq !== _basinSeq) return;
     basinFrame.removeAttribute('aria-busy');
@@ -1772,7 +1852,7 @@
     basinImg.alt = plotAlt(row, date);
     basinImg.src = url;
     basinImg.hidden = false;
-    const years = idx.reference_water_years;
+    const years = idx.reference_water_years || periodYears(periodFor(date));
     // The full-size image in a new tab: on a phone the plot is a thumbnail.
     basinCaption.replaceChildren(`${PLOT_TYPES[type]} · ${MCO.formatDateStr(date)} · ${flavorName(flavor)}`
       + (Array.isArray(years) && years.length ? ` from snow years ${years[0]}–${years[years.length - 1]}` : '')
@@ -1780,7 +1860,7 @@
 
     // Warm the neighbours a visitor is likely to ask for next.
     for (const f of Object.keys(FLAVORS)) for (const t of Object.keys(PLOT_TYPES))
-      if (f !== flavor || t !== type) loadImage(plotUrl(idx, date, f, t, huc));
+      if (f !== flavor || t !== type) loadImage(plotUrl(date, f, t, huc));
   }
 
   // ── Share ─────────────────────────────────────────────────────────────────
@@ -2104,9 +2184,11 @@
   // map's. Stations sit in water years (1 October – 30 September), the
   // SNODAS snow year a month later.
   //
-  // The day's percentiles come from the water year's observed table
+  // The day's percentiles come from the water year's percentiles table
   // (observedOn), read only while the layer is on. The current year is read
-  // from latest/, which the CDN refreshes hourly.
+  // from daily/latest/, which the CDN refreshes hourly. Keys are in
+  // mco-snotel's layout v1, by the `snodas` role's period for the water
+  // year (the manifest's for the current year).
   //
   // The two products date the same moment a day apart. A SNODAS day is its
   // analysis at 06:00 UTC, midnight Mountain as the day begins; mco-snotel
@@ -2116,12 +2198,10 @@
   // station's date is printed names both, since the plots and NRCS's own
   // pages carry the earlier one.
   const SNOTEL_ROOT   = `${DATA_HOST}/snotel`;
-  const SNOTEL_PERIOD = 'snodas';
   const SNOTEL_RADIUS = [[3, 3.5], [7, 5], [11, 7.5]];   // [zoom, px]
   const SNOTEL_NOREAD = '#9a9a9a';   // a station with no reading: grey,
   const SNOTEL_NOREAD_SCALE = 0.6;   // …and smaller
   const SNOTEL_CREDIT = 'USDA NRCS SNOTEL';
-  const waterYear = (d) => +d.slice(0, 4) + (+d.slice(5, 7) >= 10 ? 1 : 0);
   const snotelDay = (d) => MCO.shiftDate(d, -1);
   const mapDay    = (d) => MCO.shiftDate(d, 1);
   const nrcsLabel = (d) => `NRCS ${MCO.formatDateStr(snotelDay(d))}, end of day`;
@@ -2130,7 +2210,11 @@
   const pqZstd = (pq) => ({ ZSTD: (input) => pq.zstdDecompress(input) });
 
   function snotelManifest() {
-    return _cache.cached('snotel:manifest', () => MCO.fetchJSON(`${SNOTEL_ROOT}/latest/manifest.json`, { cache: 'no-cache' }));
+    return _cache.cached('snotel:manifest', () => MCO.fetchJSON(`${SNOTEL_ROOT}/daily/latest/manifest.json`, { cache: 'no-cache' }));
+  }
+  // The station normals period for water year wy.
+  async function snotelPeriod(wy) {
+    return rolePeriod(await snotelManifest().catch(() => null), wy);
   }
 
   // Stations in the SNODAS domain, active now or reporting past the start of
@@ -2138,7 +2222,7 @@
   function loadStations() {
     return _cache.cached('snotel:stations', async () => {
       const pq = await parquetLib();
-      const res = await fetch(`${SNOTEL_ROOT}/stations/stations.parquet`);
+      const res = await fetch(`${SNOTEL_ROOT}/stations.parquet`);
       if (!res.ok) throw new Error(`stations fetch failed: ${res.status}`);
       const rows = await pq.parquetReadObjects({ file: await res.arrayBuffer(), compressors: pqZstd(pq) });
       const [[w, s], [e, n]] = COG_BOUNDS;
@@ -2151,7 +2235,7 @@
     });
   }
 
-  // One water year's observed table, opened by HTTP range requests: the
+  // One water year's percentiles table, opened by HTTP range requests: the
   // footer once, then only the row groups a date needs. mco-snotel sorts it
   // by flavor, date and triplet and writes about a month of one flavor per
   // row group, so a date is one group, or two where a group boundary falls
@@ -2162,9 +2246,10 @@
   function observedFile(wy) {
     return _cache.cached(`snotel:obsfile:${wy}`, async () => {
       const latest = await snotelManifest().catch(() => null);
+      const p = rolePeriod(latest, wy);
       const url = latest?.water_year === wy
-        ? `${SNOTEL_ROOT}/latest/observed_${SNOTEL_PERIOD}.parquet`
-        : `${SNOTEL_ROOT}/normals/${SNOTEL_PERIOD}/observed/wy${wy}.parquet`;
+        ? `${SNOTEL_ROOT}/daily/latest/percentiles_${ROLE}.parquet`
+        : `${SNOTEL_ROOT}/daily/percentiles/${p}/percentiles_${p}_wy${wy}.parquet`;
       const head = await fetch(url, { method: 'HEAD' });
       if (head.status === 404) return null;
       if (!head.ok) throw new Error(`observed table ${head.status}`);
@@ -2221,18 +2306,21 @@
     return out;
   }
 
-  // One station's normals for its water year (all flavors and days, ~130 KB):
-  // `${flavor}|${date}` → { mean, q10, q50, q90 }, inches. Only for the
-  // dialog's data table and text alternative.
+  // One station's normals for its water year's period (all flavors and
+  // days, ~130 KB): `${flavor}|${MM-DD}` → { mean, q10, q50, q90 }, inches.
+  // Keyed by day of the year, since a period's normals serve every water
+  // year that uses the period. Only for the dialog's data table and text
+  // alternative.
   function loadStationNormals(id, wy) {
     return _cache.cached(`snotel:normals:${id}:${wy}`, async () => {
       const pq = await parquetLib();
-      const res = await fetch(`${SNOTEL_ROOT}/normals/${SNOTEL_PERIOD}/wy${wy}/by_station/${id}.parquet`);
+      const p = await snotelPeriod(wy);
+      const res = await fetch(`${SNOTEL_ROOT}/normals/${p}/by_station/${id}_${p}.parquet`);
       if (!res.ok) throw new Error(`normals fetch failed: ${res.status}`);
       const rows = await pq.parquetReadObjects({
         file: await res.arrayBuffer(), columns: ['flavor', 'date', 'mean', 'q0100', 'q0500', 'q0900'], compressors: pqZstd(pq),
       });
-      return new Map(rows.map(r => [`${r.flavor}|${isoDay(r.date)}`,
+      return new Map(rows.map(r => [`${r.flavor}|${isoDay(r.date).slice(5)}`,
         { mean: r.mean ?? null, q10: r.q0100 ?? null, q50: r.q0500 ?? null, q90: r.q0900 ?? null }]));
     });
   }
@@ -2343,9 +2431,10 @@
   }
 
   // ── The station dialog ──
-  // One station's seasonal SWE plot, which mco-snotel renders per date,
-  // period and flavor (plots/{date}/{period}/{flavor}/swe/usdm/{station}.png,
-  // plots/{date}/index.json written last). Built like the basin dialog: its
+  // One station's seasonal SWE plot, which mco-snotel renders per period,
+  // date and flavor (daily/plots/{period}/{date}/{flavor}/
+  // {station}_swe_{period}_{flavor}_{date}.png, with the period's
+  // index_{period}_{date}.json written last). Built like the basin dialog: its
   // date and normals controls are the page's own, and there is one plot type,
   // since a station has no elevation bands.
   const stationModal    = document.getElementById('station-modal');
@@ -2402,27 +2491,29 @@
   });
 
   // Which dates have station plots: as for the basins, from the snotel
-  // bucket. index.json's `periods` is an array, or a bare string when there
-  // is only one.
+  // bucket, in the period of d's water year. The index is the period's, so
+  // it carries the plot's period in its key. Its `period` field, where it
+  // has one, is checked too. Null when there's no index.
   function stationPlotIndex(d) {
     return _cache.cached(`snotel:plots:${d}`, async () => {
-      const idx = await MCO.fetchJSON(`${SNOTEL_ROOT}/plots/${d}/index.json`).catch(() => null);
-      return idx && [].concat(idx.periods || []).includes(SNOTEL_PERIOD) ? idx : null;
+      const p = await snotelPeriod(waterYear(d));
+      const idx = await MCO.fetchJSON(`${SNOTEL_ROOT}/daily/plots/${p}/${d}/index_${p}_${d}.json`).catch(() => null);
+      return idx ? { ...idx, period: p } : null;
     });
   }
-  function stationPlotDates() {
-    return _cache.cached('snotel:plots:dates', async () => (await s3Prefixes('plots/', 'snotel'))
-      .map(p => /^plots\/(\d{4}-\d{2}-\d{2})\/$/.exec(p)?.[1]).filter(Boolean).sort()
-    ).catch(() => []);
+  function stationPlotDates(d) {
+    return snotelPeriod(waterYear(d)).then(p => _cache.cached(`snotel:plots:dates:${p}`, async () => {
+      const prefix = `daily/plots/${p}/`;
+      return (await s3Prefixes(prefix, 'snotel'))
+        .map(x => (x.startsWith(prefix) ? /^(\d{4}-\d{2}-\d{2})\/$/.exec(x.slice(prefix.length))?.[1] : null)).filter(Boolean).sort();
+    })).catch(() => []);
   }
   // The same two, in map dates (a station plot for D − 1 is the map's D),
   // for nearestPlotDate.
-  const stationPlotMapDates = async () => (await stationPlotDates()).map(mapDay);
+  const stationPlotMapDates = async (d) => (await stationPlotDates(snotelDay(d))).map(mapDay);
   const stationPlotMapIndex = (d) => stationPlotIndex(snotelDay(d));
-  const stationPlotUrl = (idx, d, flavor, id) => `${SNOTEL_ROOT}/plots/${d}/`
-    + (idx.path || '{period}/{flavor}/{type}/{style}/{station}.png')
-      .replace('{period}', SNOTEL_PERIOD).replace('{flavor}', flavor).replace('{type}', 'swe')
-      .replace('{style}', PLOT_STYLE).replace('{station}', id);
+  const stationPlotUrl = (idx, d, flavor, id) =>
+    `${SNOTEL_ROOT}/daily/plots/${idx.period}/${d}/${flavor}/${id}_swe_${idx.period}_${flavor}_${d}.png`;
 
   function showStationEmpty(text, action) {
     stationImg.hidden = true;
@@ -2474,7 +2565,7 @@
       observedOn(day, flavor).catch(() => null),
       loadStationNormals(st.id, waterYear(day)).catch(() => null),
     ]).then(([obsDay, normals]) => ({
-      obs: obsDay?.get(st.triplet) ?? null, norm: normals?.get(`${flavor}|${day}`) ?? null,
+      obs: obsDay?.get(st.triplet) ?? null, norm: normals?.get(`${flavor}|${day.slice(5)}`) ?? null,
     }));
     let got = null, shown = false;
     numbers.then((n) => {
@@ -2487,7 +2578,7 @@
     const idx = await stationPlotIndex(day);
     if (seq !== _stationSeq) return;
 
-    if (!idx || (idx.flavors && !idx.flavors.includes(flavor))) {
+    if (!idx || !indexHasFlavor(idx, flavor)) {
       const near = await nearestPlotDate(date, { dates: stationPlotMapDates, index: stationPlotMapIndex });
       if (seq !== _stationSeq) return;
       stationFrame.removeAttribute('aria-busy');
@@ -2514,7 +2605,7 @@
     shown = true;
     stationImg.src = url;
     stationImg.hidden = false;
-    const years = idx.reference_water_years?.[SNOTEL_PERIOD];
+    const years = periodYears(idx.period);
     stationCaption.replaceChildren(`SWE · start of ${MCO.formatDateStr(date)}, dated ${MCO.formatDateStr(day)} on the plot as NRCS does · ${flavorName(flavor)}`
       + (Array.isArray(years) && years.length ? ` from water years ${years[0]}–${years[years.length - 1]}` : '')
       + '. ', h('a', { href: url, target: '_blank', rel: 'noopener', textContent: 'Open the full-size plot' }), '.');
@@ -2778,12 +2869,14 @@
   // Method detail lives here, not in the info dialog (VOICE: plain words
   // first, method last). From the normals README published beside the data.
   const FLAVOR_DESC = {
-    zig_smooth: 'A zero-adjusted gamma distribution whose parameters change smoothly through the snow year (cyclic P-splines), fit to every day of the reference record at once. Neighbouring days share information, so the normal for one date does not jump around from the next.',
-    zig:        'A zero-inflated gamma distribution fit separately for each calendar day by L-moments, which smooths over sparse records and can extrapolate beyond observed extremes. Pixels with fewer than four snowy reference years fall back to the empirical distribution.',
-    ecdf:       'The empirical distribution of the reference years for that calendar day, with no fitted curve. This year is ranked directly against them, so it cannot be ranked beyond the highest or lowest year in the record.',
+    smoothed:  'A zero-adjusted gamma distribution whose parameters change smoothly through the snow year (cyclic P-splines), fit to every day of the reference record at once. Neighbouring days share information, so the normal for one date does not jump around from the next.',
+    fitted:    'A zero-inflated gamma distribution fit separately for each calendar day by L-moments, which smooths over sparse records and can extrapolate beyond observed extremes. Pixels with fewer than four snowy reference years fall back to the empirical distribution.',
+    empirical: 'The empirical distribution of the reference years for that calendar day, with no fitted curve. This year is ranked directly against them, so it cannot be ranked beyond the highest or lowest year in the record.',
   };
   const ZERO_NOTE = 'All three count bare ground separately. Zero SWE sits at the middle of the share of reference years that were also bare, so a place that is always bare on that date reads 50.';
-  const NORMALS_DOC = `${DATA_HOST}/snodas/normals/README.md`;   // mco-snodas s3-docs, published with the data
+  // mco-snodas s3-docs, published with the data. Not a layout v1 artifact:
+  // it stays at its old key until mco-snodas publishes its READMEs under v1.
+  const NORMALS_DOC = `${SNODAS_ROOT}/normals/README.md`;
   const WBD_URL    = 'https://www.usgs.gov/national-hydrography/watershed-boundary-dataset';
   const SNODAS_URL = 'https://nsidc.org/data/g02158';
 
@@ -2796,7 +2889,7 @@
     document.getElementById('provenance-modal-subtitle').textContent =
       `${MCO.formatDateStr(prov.normals_date)} · ${methodLabel}`;
 
-    const computedAt = new Date(prov.computed_at).toLocaleString('en-US', {
+    const computedAt = prov.computed_at && new Date(prov.computed_at).toLocaleString('en-US', {
       timeZone: MCO.TZ, month: 'long', day: 'numeric', year: 'numeric',
       hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
     });
@@ -2815,7 +2908,7 @@
       section('Reference period', h('p', { textContent: `${prov.n_reference_years} SNODAS dates spanning ${refRange(prov)}.` })),
       section('Reference dates', h('ul', { className: 'provenance-dates' },
         ...prov.reference_dates.map(d => h('li', { textContent: MCO.formatDateStr(d) })))),
-      section('Computed', h('p', { textContent: computedAt })),
+      ...(computedAt ? [section('Computed', h('p', { textContent: computedAt }))] : []),
     );
 
     provenanceCtl.open();

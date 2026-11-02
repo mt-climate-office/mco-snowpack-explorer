@@ -62,7 +62,7 @@ export default {
     { name: 'gridded-winter', query: '?date=2026-02-15', ready: painted },
     { name: 'zonal-winter', query: '?date=2026-02-15&view=zonal&huc=4', ready: painted },
     // A non-default flavor of normals (Empirical) on the zonal view.
-    { name: 'zonal-flavor', query: '?date=2025-10-22&view=zonal&huc=4&flavor=ecdf', ready: painted },
+    { name: 'zonal-flavor', query: '?date=2025-10-22&view=zonal&huc=4&flavor=empirical', ready: painted },
     // Basin deep link: the dialog opens over the map on the HypsomeSWE plot.
     { name: 'basin-dialog', query: '?date=2025-10-22&view=zonal&huc=4&basin=1002&plot=hypsomeswe', ready: plotShown },
     // Place search with its listbox open (the Gazetteer and the watersheds).
@@ -129,7 +129,7 @@ export default {
     {
       const { page, close } = await open('?date=2026-02-15&method=ecdf', { ready: painted, timeout: 45000 });
       const r = await page.evaluate(() => ({ q: location.search, checked: document.querySelector('#flavor-btns input:checked').value }));
-      check('URL: legacy ?method=ecdf lands on Empirical and is rewritten as ?flavor=', r.checked === 'ecdf' && /flavor=ecdf/.test(r.q) && !/method=/.test(r.q), JSON.stringify(r));
+      check('URL: legacy ?method=ecdf lands on Empirical and is rewritten as ?flavor=empirical', r.checked === 'empirical' && /flavor=empirical/.test(r.q) && !/method=/.test(r.q), JSON.stringify(r));
       await close();
     }
     // The first-visit intro opens on a bare URL and never over a deep link
@@ -166,14 +166,14 @@ export default {
       await page.focus('#basin-flavor-btns input:checked');
       await page.keyboard.press('ArrowRight'); await page.waitForTimeout(800);
       const fl = await st();
-      check('basin: Normals in the dialog moves the navbar control and the URL', fl.navFlavor === 'zig' && fl.flavor === 'zig', JSON.stringify(fl));
+      check('basin: Normals in the dialog moves the navbar control and the URL', fl.navFlavor === 'fitted' && fl.flavor === 'fitted', JSON.stringify(fl));
       await page.focus('#btn-basin-next'); await page.keyboard.press('Enter');
       await waitFor(page, '2025-10-23');
       const dt = await st();
       check('basin: the dialog stepper moves the page date and re-emits ?date=', dt.date === '2025-10-23' && /date=2025-10-23/.test(await search(page)), JSON.stringify(dt));
       await page.goBack({ waitUntil: 'commit' }).catch(() => {}); await page.waitForTimeout(800);
       const back = await st();
-      check('basin: Back closes the dialog and keeps the choices made in it', !back.open && !back.basin && back.flavor === 'zig' && back.date === '2025-10-23', JSON.stringify(back));
+      check('basin: Back closes the dialog and keeps the choices made in it', !back.open && !back.basin && back.flavor === 'fitted' && back.date === '2025-10-23', JSON.stringify(back));
       await page.goForward({ waitUntil: 'commit' }).catch(() => {}); await page.waitForTimeout(1500);
       const fwd = await st();
       check('basin: Forward reopens it', fwd.open && fwd.basin === opened.basin, JSON.stringify(fwd));
