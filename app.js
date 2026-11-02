@@ -244,8 +244,10 @@
   const fgbUrl = lvl => `${SNODAS_ROOT}/zonal/zones_huc${lvl}.fgb`;
   const zonalUrl = (d, m = currentFlavor, type = 'swe') => { const p = periodFor(d);
     return `${SNODAS_ROOT}/zonal/daily/zones/${p}/${d}/zones_${type}_${p}_${m}_${d}.parquet`; };
-  const provenanceUrl = (d) => { const p = periodFor(d);
-    return `${SNODAS_ROOT}/gridded/normals/${p}/provenance_${p}.json`; };
+  // Provenance is per flavor and day (MM-DD) until normals 2.1 gives one
+  // file per period.
+  const provenanceUrl = (d, m = currentFlavor) => { const p = periodFor(d);
+    return `${SNODAS_ROOT}/gridded/normals/${p}/${m}/provenance_${p}_${m}_${d.slice(5)}.json`; };
 
   async function cogExists(d, url = cogUrl(d)) {
     try {
@@ -417,7 +419,7 @@
     return out;
   }
   function fetchProvenance(d, m = currentFlavor) {
-    return _cache.cached(`prov:${periodFor(d)}`, () => MCO.fetchJSON(provenanceUrl(d)))
+    return _cache.cached(`prov:${periodFor(d)}:${m}:${d.slice(5)}`, () => MCO.fetchJSON(provenanceUrl(d, m)))
       .then((raw) => {
         const reference_dates = referenceDates(d);
         return { normals_date: d, flavor: m, reference_dates, n_reference_years: reference_dates.length,

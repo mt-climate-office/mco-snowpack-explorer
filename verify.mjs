@@ -107,12 +107,15 @@ const [gm, zm, tm] = await Promise.all([
 ]);
 check('snodas gridded/daily/latest/manifest.json has a date and the snodas period', !!(gm?.date && gm?.roles?.[ROLE]?.period), JSON.stringify(gm)?.slice(0, 200));
 check('snodas zonal/daily/latest/manifest.json has a date and the snodas period', !!(zm?.date && zm?.roles?.[ROLE]?.period), JSON.stringify(zm)?.slice(0, 200));
-check('snotel daily/latest/manifest.json has a date, water_year and the snodas period', !!(tm?.date && tm?.water_year && tm?.roles?.[ROLE]?.period), JSON.stringify(tm)?.slice(0, 200));
+// The role's period: roles.{role}.period (spec §8), or the last part of
+// normals.{role} ("normals/wy2004-2026"), as the SNOTEL manifest gives it.
+const periodOf = (m) => m?.roles?.[ROLE]?.period ?? String(m?.normals?.[ROLE] ?? '').split('/').pop();
+check('snotel daily/latest/manifest.json has a date, water_year and the snodas period', !!(tm?.date && tm?.water_year && /^wy/.test(periodOf(tm))), JSON.stringify(tm)?.slice(0, 200));
 if (!gm || !zm || !tm) { console.log('\nNo manifests, so nothing more can be checked.'); process.exit(1); }
 
 const sm = [gm, zm].sort((a, b) => a.date.localeCompare(b.date))[0];
 const D = sm.date, P = sm.roles[ROLE].period;
-const DS = shift(D, -1), TP = tm.roles[ROLE].period;   // SNOTEL's D − 1, and its period
+const DS = shift(D, -1), TP = periodOf(tm);   // SNOTEL's D − 1, and its period
 check('the SNODAS manifests agree on the snodas period', gm.roles[ROLE].period === zm.roles[ROLE].period, `${gm.roles[ROLE].period} vs ${zm.roles[ROLE].period}`);
 check(`the snodas period is the water year's (${D} is WY${waterYear(D)})`,
   new RegExp(`-${waterYear(D) - 1}$`).test(P), P);
@@ -123,7 +126,7 @@ const keys = [
   ['snodas', 'zonal/daily/latest/manifest.json', 'newest date and period'],
   ...FLAVORS.map(f => ['snodas', `gridded/daily/percentiles/${P}/${D}/${P}_${f}_${D}_swe_ptile.tif`, 'gridded percentiles']),
   ...FLAVORS.map(f => ['snodas', `gridded/normals/${P}/${f}/${P}_${f}_${D.slice(5)}_median.tif`, 'gridded median, hover']),
-  ['snodas', `gridded/normals/${P}/provenance_${P}.json`, 'legend and details'],
+  ...FLAVORS.map((m) => ['snodas', `gridded/normals/${P}/${m}/provenance_${P}_${m}_${D.slice(5)}.json`, 'legend and details']),
   ['snodas', `raw/cog/${D}/snodas_swe_${D}.tif`, 'gridded SWE, hover'],
   ...[2, 4, 6, 8].map(l => ['snodas', `zonal/zones_huc${l}.fgb`, 'watershed boundaries']),
   ...FLAVORS.flatMap(f => ['swe', 'hypsomeswe'].map(t => ['snodas', `zonal/daily/zones/${P}/${D}/zones_${t}_${P}_${f}_${D}.parquet`, t === 'swe' ? 'zonal map, hover, basin facts' : 'elevation band table'])),
