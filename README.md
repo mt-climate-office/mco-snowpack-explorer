@@ -18,7 +18,7 @@ in past years and colored with the U.S. Drought Monitor categories (D4 to W4).
 - **Normals**: the past years are turned into a range of normal snow in one of
   three ways, which the page can switch between: Smoothed (`smoothed`, the
   default), Fitted (`fitted`) and Empirical (`empirical`). The method is in
-  [`normals/README.md`](https://data2.climate.umt.edu/snodas/normals/README.md)
+  [`gridded/normals/README.md`](https://data2.climate.umt.edu/snodas/gridded/normals/README.md)
   beside the data.
 - **SNOTEL stations**: turned on with the SNOTEL button in the bar, every NRCS SNOTEL station
   in the SNODAS domain, colored by its own SWE percentile for the date and
