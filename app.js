@@ -2887,9 +2887,8 @@
     empirical: 'The empirical distribution of the reference years for that calendar day, with no fitted curve. This year is ranked directly against them, so it cannot be ranked beyond the highest or lowest year in the record.',
   };
   const ZERO_NOTE = 'All three count bare ground separately. Zero SWE sits at the middle of the share of reference years that were also bare, so a place that is always bare on that date reads 50.';
-  // mco-snodas s3-docs, published with the data. Not a layout v1 artifact:
-  // it stays at its old key until mco-snodas publishes its READMEs under v1.
-  const NORMALS_DOC = `${SNODAS_ROOT}/normals/README.md`;
+  // mco-snodas s3-docs/gridded/normals/README.md, published with the data.
+  const NORMALS_DOC = `${SNODAS_ROOT}/gridded/normals/README.md`;
   const WBD_URL    = 'https://www.usgs.gov/national-hydrography/watershed-boundary-dataset';
   const SNODAS_URL = 'https://nsidc.org/data/g02158';
 
