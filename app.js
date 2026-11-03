@@ -159,6 +159,13 @@
   // SWE depth as the plots and tables print it: mm, then inches.
   const fmtSwe = (v) => (v == null || Number.isNaN(v) ? '—' : `${Math.round(v)} mm (${(v / 25.4).toFixed(1)} in)`);
 
+  // A watershed's water volume in acre-feet, its mean SWE (mm) over the area
+  // of its SNODAS cells (m²), abbreviated as the plots' axes are (4.6K,
+  // 10.54M; scales::cut_short_scale() in mco-snodas R/plot.R).
+  const M3_PER_ACRE_FOOT = 1233.48183754752;
+  const fmtAcreFeet = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 });
+  const fmtVolume = (swe, area) => `${fmtAcreFeet.format(swe / 1000 * area / M3_PER_ACRE_FOOT)} acre-feet`;
+
   // Build an element with DOM calls only (HOUSE-STYLE §7): text children are
   // set as text, never parsed as HTML.
   function h(tag, props, ...children) {
@@ -929,10 +936,14 @@
       .catch(err => { _parquetLib = null; throw err; }));
   }
 
-  // Fetch with Cache API persistence (falls back to plain fetch in non-secure contexts)
+  // Fetch with Cache API persistence (falls back to plain fetch in non-secure
+  // contexts). A hit is never revalidated, so the name changes whenever the
+  // boundaries gain a property the app reads (v2: snodas_area_m2), and the
+  // old cache is dropped.
+  globalThis.caches?.delete('mco-snodas-fgb-v1').catch(() => {});
   async function fetchCached(url) {
     try {
-      const cache = await caches.open('mco-snodas-fgb-v1');
+      const cache = await caches.open('mco-snodas-fgb-v2');
       const hit   = await cache.match(url);
       if (hit) return hit;
       const res = await fetch(url);
@@ -1206,7 +1217,7 @@
   //   Duncan River (HUC: 17010109)        ← zonal only
   //   March 30, 2026
   //   148% of Normal (~90th percentile)
-  //   SWE 81 mm (3.2 in)
+  //   SWE 81 mm (3.2 in)                  ← gridded; zonal: SWE 310K acre-feet
   // App-owned rather than MCO.map.initCursorTooltip: the gridded reading is
   // an async raster sample, not a rendered feature. The lines are spans set
   // with textContent, in the kit's tooltip classes.
@@ -1240,16 +1251,18 @@
 
   // The reading under a map point: {title?, lines[]}, or null for no data.
   // Zonal: the watershed's row from the Parquet table (synchronous once
-  // loaded). Gridded: the percentile, SWE and median grids, sampled in
-  // parallel. Where the median isn't published, conditions() shows the
+  // loaded), its SWE as the volume of water it holds over the area of its
+  // SNODAS cells (the boundaries' snodas_area_m2; depth without it).
+  // Gridded: the percentile, SWE and median grids, sampled in parallel. Where the median isn't published, conditions() shows the
   // percentile alone, as the plots do when the median is zero.
   function zonalReading(f) {
-    const { name, huc } = f.properties;
+    const { name, huc, snodas_area_m2: area } = f.properties;
     const row = _zonalCache.get(`${currentDate}_${currentFlavor}`)?.get(String(huc)) ?? null;
+    const swe = row?.swe == null ? null : area ? `SWE ${fmtVolume(row.swe, area)}` : sweLine(row.swe);
     return {
       title: `${name || `HUC${String(huc).length}`} (HUC: ${huc})`,
       lines: [MCO.formatDateStr(currentDate),
-        ...(row ? [conditions(row.swe, row.q50, row.ptile), sweLine(row.swe)] : [])].filter(Boolean),
+        ...(row ? [conditions(row.swe, row.q50, row.ptile), swe] : [])].filter(Boolean),
     };
   }
   async function griddedReading(lngLat) {
