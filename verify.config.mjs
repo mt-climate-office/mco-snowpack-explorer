@@ -11,8 +11,11 @@
    So `ready` samples the WebGL canvas (preserveDrawingBuffer is on for the PNG
    export) and waits for saturated pixels. The CARTO basemaps and the
    hillshade are near-grey; the USDM ramp's reds, yellows and blues are not.
-   A WINTER date on purpose — in summer there is no snow, so the raster is
-   legitimately empty and the check would prove nothing. Functions, never
+   A snow-season date on purpose — in summer there is no snow, so the raster
+   is legitimately empty and the check would prove nothing. The scenarios
+   sit in the current water year's normals period (wy2004-2026): data2 has
+   no provenance and only Smoothed percentiles for WY2026 now, so a WY2026
+   date logs 404s that are the data's, not the page's. Functions, never
    strings: the page's CSP has no 'unsafe-eval'. */
 function painted() {
   const c = document.querySelector('#map canvas');
@@ -81,26 +84,28 @@ export default {
   storage: { 'mco-snowpack-info-seen': '1' },
   settleMs: 2000,
   scenarios: [
-    { name: 'gridded-winter', query: '?date=2026-02-15', ready: painted },
-    { name: 'zonal-winter', query: '?date=2026-02-15&view=zonal&huc=4', ready: painted },
-    // A non-default flavor of normals (Empirical) on the zonal view.
-    { name: 'zonal-flavor', query: '?date=2025-10-22&view=zonal&huc=4&flavor=empirical', ready: painted },
+    { name: 'gridded-winter', query: '?date=2026-11-02', ready: painted },
+    { name: 'zonal-winter', query: '?date=2026-11-02&view=zonal&huc=4', ready: painted },
+    // A non-default flavor of normals (Empirical) on the zonal view. On the
+    // current water year's period: data2 now has only Smoothed for WY2026,
+    // so an Empirical WY2026 date logs 404s that are the data's, not the page's.
+    { name: 'zonal-flavor', query: '?date=2026-10-22&view=zonal&huc=4&flavor=empirical', ready: painted },
     // Basin deep link: the detail panel opens beside the map on the
     // HypsomeSWE plot (a bottom sheet at 390).
-    { name: 'basin-dialog', query: '?date=2025-10-22&view=zonal&huc=4&basin=1002&plot=hypsomeswe', ready: plotShown },
+    { name: 'basin-dialog', query: '?date=2026-10-22&view=zonal&huc=4&basin=1002&plot=hypsomeswe', ready: plotShown },
     // Place search with its listbox open (the Gazetteer and the watersheds).
-    { name: 'search-list', query: '?date=2026-02-15', ready: searchListOpen },
+    { name: 'search-list', query: '?date=2026-11-02', ready: searchListOpen },
     // SNOTEL stations over the gridded view, and the ?station= deep link:
     // the detail panel at 1440, the bottom sheet at 390, on a date its plots
     // exist (901_MT_SNTL is in the live stations.parquet).
-    { name: 'snotel', query: '?date=2026-02-15&snotel=on&lng=-111.5&lat=46.0&zoom=6', ready: painted },
+    { name: 'snotel', query: '?date=2026-11-02&snotel=on&lng=-111.5&lat=46.0&zoom=6', ready: painted },
     { name: 'station-deeplink', query: '?date=2026-10-30&station=901_MT_SNTL', ready: stationShown },
     // The phone bar's drawer open (at 1440, the bar itself).
-    { name: 'drawer-open', query: '?date=2026-02-15', ready: drawerOpen },
+    { name: 'drawer-open', query: '?date=2026-11-02', ready: drawerOpen },
     // A chip toggled on: SNOTEL from a URL that has it off.
-    { name: 'chip-toggle', query: '?date=2026-02-15', ready: snotelChipOn },
+    { name: 'chip-toggle', query: '?date=2026-11-02', ready: snotelChipOn },
     // Ski runs, lifts and names over Big Sky, close enough for the trail signs.
-    { name: 'ski-runs', query: '?date=2026-02-15&lng=-111.40&lat=45.28&zoom=13.5', ready: painted },
+    { name: 'ski-runs', query: '?date=2026-11-02&lng=-111.40&lat=45.28&zoom=13.5', ready: painted },
   ],
   exemptTargets: '',
   allowProblems: [],
@@ -155,7 +160,12 @@ export default {
       await close();
     }
     {
-      const { page, close } = await open('?date=2026-02-15&method=ecdf', { ready: painted, timeout: 45000 });
+      // Ready on the rewrite, not on paint: the data for this check is the
+      // URL, and the Empirical raster for a WY2026 date is no longer
+      // published (data2 has only Smoothed under wy2004-2025), so `painted`
+      // never came true and this timeout stopped every probe after it.
+      const { page, close } = await open('?date=2026-02-15&method=ecdf',
+        { ready: () => /flavor=empirical/.test(location.search), timeout: 45000 });
       const r = await page.evaluate(() => ({ q: location.search, checked: document.querySelector('#flavor-btns input:checked').value }));
       check('URL: legacy ?method=ecdf lands on Empirical and is rewritten as ?flavor=empirical', r.checked === 'empirical' && /flavor=empirical/.test(r.q) && !/method=/.test(r.q), JSON.stringify(r));
       await close();
@@ -178,8 +188,10 @@ export default {
     // reopens it, and Esc steps Back over the entry instead of leaving a
     // second one. Inside it, the normals and the date are the page's own:
     // changing them there moves the navbar's controls and the map's data too.
+    // On the current water year's period, where every flavor is published
+    // (WY2026 has only Smoothed now, so stepping on Fitted found no date).
     {
-      const { page, close } = await open('?date=2025-10-22&view=zonal&huc=2', { ready: painted, timeout: 45000 });
+      const { page, close } = await open('?date=2026-10-22&view=zonal&huc=2', { ready: painted, timeout: 45000 });
       const st = () => page.evaluate(() => ({
         open: document.getElementById('detail-sheet').dataset.kind === 'basin' && document.getElementById('detail-sheet').dataset.state !== 'closed',
         basin: new URLSearchParams(location.search).get('basin'),
@@ -197,12 +209,12 @@ export default {
       const fl = await st();
       check('basin: Normals in the panel moves the navbar control and the URL', fl.navFlavor === 'fitted' && fl.flavor === 'fitted', JSON.stringify(fl));
       await page.focus('#btn-detail-next'); await page.keyboard.press('Enter');
-      await waitFor(page, '2025-10-23');
+      await waitFor(page, '2026-10-23');
       const dt = await st();
-      check('basin: the panel stepper moves the page date and re-emits ?date=', dt.date === '2025-10-23' && /date=2025-10-23/.test(await search(page)), JSON.stringify(dt));
+      check('basin: the panel stepper moves the page date and re-emits ?date=', dt.date === '2026-10-23' && /date=2026-10-23/.test(await search(page)), JSON.stringify(dt));
       await page.goBack({ waitUntil: 'commit' }).catch(() => {}); await page.waitForTimeout(800);
       const back = await st();
-      check('basin: Back closes the panel and keeps the choices made in it', !back.open && !back.basin && back.flavor === 'fitted' && back.date === '2025-10-23', JSON.stringify(back));
+      check('basin: Back closes the panel and keeps the choices made in it', !back.open && !back.basin && back.flavor === 'fitted' && back.date === '2026-10-23', JSON.stringify(back));
       await page.goForward({ waitUntil: 'commit' }).catch(() => {}); await page.waitForTimeout(1500);
       const fwd = await st();
       check('basin: Forward reopens it', fwd.open && fwd.basin === opened.basin, JSON.stringify(fwd));
