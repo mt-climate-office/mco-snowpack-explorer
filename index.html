@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="mco-autolift">
 <head>
   <meta charset="UTF-8">
   <!-- Endpoints this page actually uses, and nothing else. script-src carries
@@ -19,7 +19,7 @@
        error, which is the whole reason to enumerate these carefully. -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'none';
-    script-src 'self' 'sha256-OLe5UNKipCWDsiB3oW7e+OsD0zw6rjzozTKfQk0LVVk=' 'sha256-NgHBdw+Nl6S2kTHNyvv5uFwHfytmfDJR39Y9qVPt/UI=' https://unpkg.com https://cdn.jsdelivr.net;
+    script-src 'self' 'sha256-ZnLomP9D6ZNSmSKBGWua8AdW5+57G5UWlLF5K5dmtFM=' 'sha256-NgHBdw+Nl6S2kTHNyvv5uFwHfytmfDJR39Y9qVPt/UI=' https://unpkg.com https://cdn.jsdelivr.net;
     worker-src blob: https://unpkg.com;
     style-src 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net;
     font-src https://cdn.jsdelivr.net;
@@ -42,11 +42,11 @@
   <!-- Favicons / app icons, hot-linked from the pinned kit tag (kit 0.9.0,
        decided 2026-10-08) so they version with the kit and can't drift. The
        navbar logo stays vendored in assets/. -->
-  <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/assets/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/assets/favicon-16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/assets/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/assets/icon-192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/assets/icon-512.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/assets/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/assets/icon-512.png">
 
   <!-- Open Graph / Twitter. The card image is the kit's og-card.png from the
        pinned tag (the vendored copy was never referenced). -->
@@ -55,22 +55,23 @@
   <meta property="og:title"       content="Snowpack · Montana Climate Office">
   <meta property="og:description" content="Daily snowpack percentiles for the lower 48 states and their watersheds, from NOAA SNODAS. A service of the Montana Climate Office.">
   <meta property="og:url"         content="https://snow.climate.umt.edu/">
-  <meta property="og:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/assets/og-card.png">
+  <meta property="og:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/assets/og-card.png">
   <meta property="og:image:width"  content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt"   content="Montana Climate Office">
   <meta name="twitter:card"        content="summary_large_image">
   <meta name="twitter:title"       content="Snowpack · Montana Climate Office">
   <meta name="twitter:description" content="Daily snowpack percentiles for the lower 48 states and their watersheds, from NOAA SNODAS. A service of the Montana Climate Office.">
-  <meta name="twitter:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/assets/og-card.png">
+  <meta name="twitter:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/assets/og-card.png">
   <meta name="twitter:image:alt"   content="Montana Climate Office">
 
-  <!-- mco-web-style · anti-flash theme boot (snippets/anti-flash.html @0.18.0, unchanged since 0.9.0;
-       copied byte for byte). Kept INLINE and ahead of every stylesheet on
-       purpose: from a CDN it would land after first paint and reintroduce the
-       flash it exists to prevent. Precedence: ?theme= → localStorage['mco-theme']
-       → OS preference. Since 0.9.0 it also adds html.mco-booting, which
-       MCO.ready() (app.js) removes; a 3 s timeout releases it regardless.
+  <!-- mco-web-style · anti-flash theme boot (snippets/anti-flash.html @0.21.0,
+       unchanged since 0.19.0; copied byte for byte). Kept INLINE and ahead of
+       every stylesheet on purpose: from a CDN it would land after first paint
+       and reintroduce the flash it exists to prevent. Precedence: ?theme= →
+       localStorage['mco-theme'] → <html data-theme-default> (unset here) → OS
+       preference. It also adds html.mco-booting, which MCO.ready() (app.js)
+       removes; a 3 s timeout releases it regardless.
        The first sha256 in the CSP above covers these exact bytes — recompute
        after any edit here, whitespace included (MIGRATING § Gotchas). -->
 <script>
@@ -81,10 +82,14 @@
     try { saved = localStorage.getItem('mco-theme'); } catch (e) {}
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const valid = ['dark', 'light', 'high-contrast'];
+    const root = document.documentElement;
+    // A page may name the theme a visitor with no choice gets (0.19.0):
+    // <html data-theme-default="light">. Otherwise the OS preference.
+    const def = root.getAttribute('data-theme-default');
     const t = valid.includes(url) ? url
             : valid.includes(saved) ? saved
+            : valid.includes(def) ? def
             : (prefersDark ? 'dark' : 'light');
-    const root = document.documentElement;
     root.setAttribute('data-theme', t);
     root.classList.toggle('is-compact', window.matchMedia('(max-width: 640px), (max-height: 560px)').matches);
     root.classList.toggle('is-touch', window.matchMedia('(hover: none)').matches);
@@ -98,8 +103,8 @@
   <!-- House fonts: kit-hosted, declared in mco-theme.css. Preloaded so the
        first frame is already in Outfit — no system-font flash. Same @version
        as the theme CSS; crossorigin is required on font preloads. -->
-  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/fonts/space-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/fonts/space-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
 
   <!-- MapLibre GL 6.11.2 (kit 0.8.0+; 5.18.0 carried the critical
        attribution-control XSS GHSA-jrc7-96c5-q579). 6.x is ES-modules only:
@@ -118,11 +123,11 @@
       integrity="sha384-ntw3zEt6rcVML7jDK0ULmHa5hxLB23afsPqzqfY+gLgMfAkbFCnCgPpkZvV5mmZX"
       crossorigin="anonymous">
 
-  <!-- mco-web-style @0.18.0 — tokens, reset, a11y utilities, navbar/panel/toast/
+  <!-- mco-web-style @0.21.0 — tokens, reset, a11y utilities, navbar/panel/toast/
        tooltip/modal shells, MapLibre control polish, and the high-contrast
        theme this page had no values for. -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/theme/mco-theme.css"
-        integrity="sha384-rTNAIEwih+PJn5SGoJzoje2bripU+o+3w0inaxaQR0SLZk26fqH4D+7AbFO7MhgS"
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/theme/mco-theme.css"
+        integrity="sha384-R5H+mIUe48yOTRQovin+qNSVBmsBzAEBvwcntc2pK76coeVYeXRYI0/rKAtFcHCo"
         crossorigin="anonymous">
 
   <style>
@@ -156,12 +161,15 @@
     }
 
     /* Date input and the narrow-screen selects. --ctrl-border for interactive
-       edges, --accent-line for the hover/focus edge (both ≥3:1 — WCAG 1.4.11). */
+       edges, --accent-line for the hover/focus edge (both ≥3:1 — WCAG 1.4.11).
+       --control-h (kit 0.21.0): the bar's one control height, 34px and 40px
+       on touch; `height`, not `min-height`, which WebKit ignores on native
+       form controls (kit MIGRATING.md § Gotchas). */
     input[type="date"], select.nav-select {
       background: none; color: var(--text-primary);
       border: 1px solid var(--ctrl-border); border-radius: var(--radius-md);
       padding: 0 0.55rem; font-size: 0.78rem; font-family: inherit;
-      cursor: pointer; height: 34px; line-height: 34px;
+      cursor: pointer; height: var(--control-h); line-height: var(--control-h);
       -webkit-appearance: none; appearance: none;
       transition: var(--transition);
     }
@@ -173,16 +181,10 @@
     input[type="date"]:hover, select.nav-select:hover { background: var(--accent-hover); border-color: var(--accent-line); }
     input[type="date"]:focus, select.nav-select:focus { border-color: var(--accent-line); background: var(--accent-hover); }
 
-    /* Date stepper: ▲/▼ stacked beside the date input. Previous comes first
-       in the DOM (and the Tab order); column-reverse draws next on top. */
-    .date-stepper { display: flex; align-items: center; gap: 4px; }
-    .date-step-btns { display: flex; flex-direction: column-reverse; gap: 2px; }
-    /* kit-override: the kit's 34px .nav-btn minimum. Two of these stack
-       beside the date input and must fit the one-row bar. */
-    .nav-btn.date-step {
-      padding: 0 4px; min-height: 0; height: 15px; min-width: 20px;
-      border-radius: var(--radius-sm); justify-content: center;
-    }
+    /* Date stepper: the kit's .nav-btn.mco-step pair either side of the date,
+       prev · date · next, in the DOM and the Tab order alike. The buttons
+       are kit-sized (--control-h square, 40px on touch). */
+    .date-stepper { display: flex; align-items: center; gap: 3px; }
 
     /* Narrow-screen fallback for the segmented groups (HOUSE-STYLE §3; the
        photo explorer's pattern). MCO.initSegmentedFallback puts [hidden] on
@@ -195,13 +197,17 @@
     .select-group:has(> select[hidden]) { display: none; }
 
     /* ── Search (kit: .mco-search + MCO.initSearchBox) ─────────────────────
-       Field, icon, listbox and the ≤640px collapse are the kit's. App-owned:
-       the "/" hint, the cancel-glyph filter, and one tagged width. Do NOT add
-       a #btn-search-toggle rule: an ID selector outbids the kit's class and
-       would strand the toggle hidden. */
-    /* kit-override: 190px, not the kit's 220px. With the zonal view's three
-       segmented groups this bar is already short of room above 1060px. */
-    .mco-search .mco-search-input { width: 190px; padding-right: 30px; }
+       Field, icon and listbox are the kit's; below 640px the field lives in
+       the phone bar's drawer. App-owned: the "/" hint, the cancel-glyph
+       filter, and the tagged widths. Do NOT add a #btn-search-toggle rule:
+       an ID selector outbids the kit's class and would strand the toggle
+       hidden. */
+    /* kit-override: 160px, not the kit's 220px, and 130px at the 1400 rung
+       (HOUSE-STYLE §3: "search narrowed"). With the zonal view's three
+       groups and the date stepper this bar is short of room above 1060px. */
+    .mco-search .mco-search-input { width: 160px; padding-right: 30px; }
+    /* kit-override: the 1400 rung's narrower field (above). */
+    @media (max-width: 1400px) { .mco-search .mco-search-input { width: 130px; } }
     #search-input::-webkit-search-cancel-button { filter: var(--ctrl-icon-filter, none); }
     .search-kbd {
       position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
@@ -213,6 +219,9 @@
     /* The / hint goes once the field has focus. */
     #search-wrap:focus-within .search-kbd { opacity: 0; }
 
+    /* kit-override: a sub-heading inside one of the info outline's four
+       sections; the kit styles only the section's <h3>. */
+    .info-section h4 { margin: 0.9rem 0 0.35rem; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
     .info-icon { display: inline-flex; align-items: center; vertical-align: middle; margin: 0 3px 1px 0; opacity: 0.8; }
     .info-icon svg { stroke: currentColor; }
 
@@ -251,11 +260,19 @@
       margin-top: 0.4rem;
     }
 
-    /* ── Basin dialog ──────────────────────────────────────────────────────────
-       The kit's dialog shell, wider: the plots are 3:2 at 2400×1600 and
-       unreadable at the shell's 540px. */
-    /* kit-override: .info-modal-box width, for the 3:2 plots. */
-    .info-modal-box.basin-box { width: min(980px, calc(100vw - 4rem)); }
+    /* ── Detail panel (kit .mco-sheet + MCO.initSheet) ─────────────────────────
+       A station's or a watershed's plots. The kit docks it at the right
+       edge (40vw at most) and makes it a bottom sheet on compact; it is
+       wider here than the kit's 360px because the plots are 3:2 and their
+       axis labels are small. */
+    #detail-sheet { --sheet-w: 560px; }
+    .detail-subtitle { margin: 0 0 0.75rem; font-size: 0.8rem; color: var(--text-secondary); }
+    /* kit-override: the map's right-hand controls (zoom and fit, the
+       attribution) move clear of the docked panel while it is open, so they
+       stay reachable and legible beside it. */
+    html:not(.is-compact) body:has(> #detail-sheet:not([hidden])) :is(.maplibregl-ctrl-top-right, .maplibregl-ctrl-bottom-right) {
+      right: min(var(--sheet-w, 560px), 40vw);
+    }
     .basin-controls {
       display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.25rem;
       margin-bottom: 0.9rem;
@@ -266,7 +283,7 @@
        same size as the plot it stands in for. */
     /* 720×480 is the animations' own size (animations/README.md): larger
        only blurs them. The plots take the same box, so starting an
-       animation doesn't resize it; on a short screen the dialog scrolls. */
+       animation doesn't resize it; on a short screen the panel scrolls. */
     .basin-frame {
       position: relative; aspect-ratio: 3 / 2;
       width: min(100%, 720px); margin-inline: auto;
@@ -276,10 +293,12 @@
     .basin-frame img, .basin-frame video { display: block; width: 100%; height: 100%; object-fit: contain; }
     .basin-anim-ctl { display: flex; gap: 0.4rem; align-items: center; }
     /* .control-group's and the frame's display rules outrank the UA's
-       [hidden]; inside the dialog, hidden means gone. */
-    .basin-box [hidden] { display: none; }
+       [hidden]; inside the panel, hidden means gone. */
+    #detail-sheet [hidden] { display: none; }
+    /* The plot type and the animation are a watershed's alone. */
+    #detail-sheet:not([data-kind="basin"]) [data-basin-only] { display: none; }
     /* kit-override: the empty state fills the plot's frame instead of
-       sitting in flow, so the dialog doesn't change height. */
+       sitting in flow, so the panel doesn't change height. */
     .basin-frame .mco-empty {
       position: absolute; inset: 0; margin: 0; border: 0; border-radius: 0;
       flex-direction: column; gap: 0.75rem;
@@ -290,7 +309,8 @@
     .basin-frames-step { grid-column: 2; display: flex; align-items: center; gap: 0.5rem; }
     .basin-frame-date { min-width: 13.5em; text-align: center; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
     .basin-frames-hint { justify-self: end; font-size: 0.75rem; color: var(--text-muted); }
-    @media (max-width: 750px) { .basin-frames-hint { display: none; } }
+    /* The hint needs the room of the wide docked panel (40vw). */
+    @media (max-width: 1200px) { .basin-frames-hint { display: none; } }
     .basin-caption { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.4rem; }
     .basin-caption a { color: var(--text-secondary); }
     .basin-data { margin-top: 0.9rem; font-size: 0.8rem; }
@@ -305,64 +325,54 @@
        kit's ladder; segmented → select is this app's own 1760 (app.js SEG_MQ),
        where the zonal bar with search stops fitting as buttons. With the zonal view's three groups
        (view, HUC level, normals) the one-row bar needs ~1150px even with the
-       labels shed, so below 1060 the bar may wrap: the controls get their own
-       full-width row and the buttons lift up beside the brand (the photo
-       explorer's pattern). CSS `order` moves the visual position only; tab
-       order is intact. */
+       labels shed, so on a tablet (1060 down to compact) the bar may wrap:
+       the controls get their own full-width row and the buttons lift up
+       beside the brand. CSS `order` moves the visual position only; tab
+       order is intact. On a phone the bar is one row (the compact drawer,
+       below), so the wrap stops at compact: min-height 561px is the rest of
+       MCO.viewport.COMPACT_MQ, since a short window is the landscape rail. */
     /* kit-override: one row above 1060. */
     @media (min-width: 1061px) { .controls { flex-wrap: nowrap; } }
-    @media (max-width: 1060px) {
-      /* kit-override: the wrapped bar's row order. */
+    @media (min-width: 641px) and (max-width: 1060px) and (min-height: 561px) {
+      /* kit-override: the wrapped tablet bar's row order. */
       .nav-meta { order: 1; }
       .controls { order: 2; flex-basis: 100%; flex-wrap: wrap; }
     }
 
-    /* ── Landscape rail (kit .mco-navbar[data-rail] + MCO.initNavRail) ──────
-       The kit owns the rail column, the drawer and the un-hiding of labels
-       inside it. What stays here is this app's own content: the date
-       readout, and how its control groups stack in the drawer. Same query as
-       MCO.viewport.RAIL_MQ. */
-    @media (max-height: 560px) and (orientation: landscape) {
+    /* ── Phone bar and its drawer (kit .mco-navbar[data-rail="compact"] +
+       MCO.initNavRail) ────────────────────────────────────────────────────
+       The kit owns the one-row bar, the landscape rail column, the drawer
+       and the un-hiding of labels inside it. What stays here is this app's
+       own content: the date readout between the bar's stepper buttons, and
+       how its control groups stack in the drawer. The query is
+       MCO.viewport.COMPACT_MQ, the union of the drawer's and the rail's. */
+    @media (max-width: 640px), (max-height: 560px) {
       .rail-readout {
         margin: 0; text-align: center; line-height: 1.25;
         font-size: 0.66rem; font-weight: 500; color: var(--text-secondary);
-        white-space: nowrap;
+        white-space: nowrap; align-self: center;
       }
       .rail-readout span { display: block; }
-      /* kit-override: undo the ≤1060 bar's row ordering — in the drawer's
-         column the controls come first and flex-basis:100% would mean full
-         height. */
-      .mco-nav-drawer .controls { order: 0; flex-basis: auto; gap: 0.75rem; }
+      /* kit-override: more air between the drawer's control groups. */
+      .mco-nav-drawer .controls { gap: 0.75rem; }
       /* kit-override: the drawer stacks each label over its control. */
       .mco-nav-drawer .control-group { flex-direction: column; align-items: stretch; gap: 0.25rem; }
       .mco-nav-drawer .date-stepper input[type="date"] { flex: 1; min-width: 0; }
-      /* kit-override: the drawer's steppers sit side by side. */
-      .mco-nav-drawer .date-step-btns { flex-direction: row; gap: 4px; }
       .mco-nav-drawer select.nav-select { width: 100%; }
       /* kit-override: the search list stays inside the short viewport. */
       .mco-nav-drawer .mco-search-list { max-height: 50dvh; }
       .mco-nav-drawer .search-kbd { display: none; }
       /* kit-override: the drawer's buttons in a two-column grid. */
       .mco-nav-drawer .nav-meta {
-        order: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
+        display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
       }
     }
 
     /* WCAG 2.5.5 — touch targets for app-owned controls (kit covers its own). */
     @media (hover: none) {
-      /* `height`, not `min-height`: WebKit ignores min-height on native form
-         controls (kit MIGRATING.md § Gotchas). */
-      input[type="date"], select.nav-select { height: 40px; line-height: 40px; }
+      /* The date input and selects take --control-h, 40px here (above). */
       .legend-row { min-height: 32px; }
       .basin-data summary { min-height: 40px; display: flex; align-items: center; }
-      /* Two stacked 15px buttons are untappable — lay the stepper out as a
-         pair of 40px targets (previous left, next right) instead. */
-      .date-step-btns { flex-direction: row; gap: 4px; }
-      /* kit-override: 40px targets in place of the 15px bar steppers. */
-      .nav-btn.date-step {
-        min-width: 40px; min-height: 40px; height: 40px;
-        border-radius: var(--radius-md);
-      }
     }
   </style>
 </head>
@@ -371,35 +381,46 @@
 <!-- WCAG 2.4.1 — first focusable element, jumps past the navbar to the map. -->
 <a class="mco-skip-link" href="#main">Skip to map</a>
 
-<!-- data-rail (kit 0.10.0): on a landscape phone the bar becomes a 56px left
-     rail and .mco-nav-drawer holds the rest (MCO.initNavRail). Outside rail
-     mode the drawer is display:contents and the bar lays out as usual. -->
-<header id="navbar" class="mco-navbar" data-rail>
+<!-- data-rail="compact" (kit 0.21.0): on a phone the bar is one row (the
+     badge · the date stepper · search · ☰) and .mco-nav-drawer opens as a
+     right drawer under it; on a landscape phone the bar becomes a 56px left
+     rail and the drawer opens beside it (MCO.initNavRail). Above compact the
+     drawer is display:contents and the bar lays out as usual. -->
+<header id="navbar" class="mco-navbar" data-rail="compact">
   <a href="https://climate.umt.edu" target="_blank" rel="noopener noreferrer"
      class="logo-link" aria-label="Montana Climate Office">
     <img src="assets/mco-logo.png" alt="" class="logo-img" width="40" height="40">
   </a>
 
-  <!-- Landscape-phone rail (kit .mco-rail). display:none except at
-       MCO.viewport.RAIL_MQ, so it is out of the accessibility tree everywhere
-       else. Menu, then the hot control: next day above previous, like the
-       date stepper, with the date between them. -->
+  <!-- The phone bar's own controls (kit .mco-rail): display:none above
+       compact, so out of the accessibility tree there. ☰ first (the kit
+       moves it to the right edge of the one-row bar), then the hot control,
+       the date stepper laid out prev · date · next, then the search button
+       last, which opens the drawer on the search field. In the landscape
+       rail the same children make the column. -->
   <div class="mco-rail">
     <button type="button" class="nav-btn icon-only" id="btn-rail-menu" aria-label="Map controls"
             aria-controls="nav-drawer" aria-expanded="false">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
-    <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-next" aria-label="Next day">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="18 15 12 9 6 15"/>
-      </svg>
-    </button>
-    <p class="rail-readout" id="rail-readout"></p>
     <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-prev" aria-label="Previous day">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="6 9 12 15 18 9"/>
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <p class="rail-readout" id="rail-readout"></p>
+    <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-next" aria-label="Next day">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </button>
+    <button type="button" class="nav-btn icon-only mco-search-toggle" id="btn-search-toggle"
+            aria-expanded="false" aria-controls="nav-drawer" aria-label="Search places and watersheds">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
     </button>
   </div>
@@ -423,24 +444,23 @@
       <div class="mco-search-list" id="search-list" hidden></div>
     </div>
 
+    <!-- The kit stepper, prev · date · next, every part at --control-h. -->
     <div class="control-group">
       <label class="control-label" for="date-input">Date</label>
       <div class="date-stepper">
+        <button type="button" class="nav-btn icon-only mco-step" id="btn-date-prev" aria-label="Previous day">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
         <input type="date" id="date-input">
-        <div class="date-step-btns">
-          <button type="button" class="nav-btn mco-step date-step" id="btn-date-prev" aria-label="Previous day">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          <button type="button" class="nav-btn mco-step date-step" id="btn-date-next" aria-label="Next day">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="18 15 12 9 6 15"/>
-            </svg>
-          </button>
-        </div>
+        <button type="button" class="nav-btn icon-only mco-step" id="btn-date-next" aria-label="Next day">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -508,27 +528,10 @@
   </div>
 
   <div class="nav-meta">
-    <!-- ≤640px: the search field above collapses; this button is its
-         disclosure, which expands it as an overlay bar under the navbar. Hidden
-         at wider widths, where the field itself is in .controls. -->
-    <button type="button" class="nav-btn icon-only mco-search-toggle" id="btn-search-toggle"
-            aria-expanded="false" aria-controls="search-wrap" aria-label="Search places and watersheds">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-    </button>
-    <!-- A map layer toggle among the bar's buttons, as mesonet-photo-explorer's
-         Boundaries: the kit's .nav-btn[aria-pressed], with an icon and a
-         .btn-label like Share and Export, which the kit sheds to the icon on
-         narrow screens. -->
-    <button type="button" class="nav-btn" id="btn-snotel" aria-pressed="false" aria-label="SNOTEL stations">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-      </svg>
-      <span class="btn-label">SNOTEL</span>
-    </button>
+    <!-- A map layer, so a chip (HOUSE-STYLE §5.7): .mco-chip[aria-pressed],
+         its label always shown. The name starts with the visible word
+         (WCAG 2.5.3). -->
+    <button type="button" class="mco-chip" id="btn-snotel" aria-pressed="false" aria-label="SNOTEL stations">SNOTEL</button>
     <button type="button" class="nav-btn" id="btn-share" aria-label="Copy shareable link">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -582,7 +585,9 @@
        after the map. -->
   <div id="map" role="application" aria-label="SWE percentile map"></div>
 
-  <aside id="legend" class="mco-panel" aria-labelledby="legend-title">
+  <!-- data-autolift (kit 0.13.0, with html.mco-autolift): on compact the
+       legend rides up with the bottom sheet instead of sitting under it. -->
+  <aside id="legend" class="mco-panel" aria-labelledby="legend-title" data-autolift>
     <div class="mco-panel-head">
       <h2 id="legend-title" class="mco-panel-title">SWE percentile</h2>
       <button type="button" class="nav-btn icon-only" id="legend-info-btn" aria-label="About this data">
@@ -613,66 +618,134 @@
      click-to-pin reading writes to, and the table twin. -->
 <div id="tooltip" class="mco-tooltip" aria-hidden="true"></div>
 
-<!-- One SNOTEL station's SWE plot: the basin dialog's frame and classes,
-     with one plot type (a station has no elevation bands) and no animation. -->
-<dialog id="station-modal" class="mco-modal" aria-labelledby="station-title">
-  <div class="info-modal-box basin-box">
-    <div class="info-modal-header">
-      <div>
-        <h2 class="info-modal-title" id="station-title">SNOTEL station</h2>
-        <p class="info-modal-subtitle" id="station-subtitle"></p>
-      </div>
-      <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
-    </div>
+<!-- The detail panel (kit MCO.initSheet, 0.21.0): docked at the right edge
+     above compact, a bottom sheet with peek and full detents on compact.
+     It shows one thing at a time, a SNOTEL station (click a station, or
+     Enter on its row in the table twin) or a watershed (click one in the
+     zonal view, or Enter on its row), and is not modal: the map stays
+     usable beside it. Date and normals are the page's own state, so
+     changing them here moves the map too; the plot type and the animation
+     are the watershed's. Opening pushes a history entry, so Back closes it.
+     The title is filled at open time; the panel is named by it. -->
+<section class="mco-sheet" id="detail-sheet" aria-labelledby="detail-title" data-state="closed" hidden>
+  <div class="mco-sheet-head">
+    <button type="button" class="mco-sheet-grip" aria-label="Expand details" aria-expanded="false"></button>
+    <h2 class="mco-sheet-title" id="detail-title" tabindex="-1">Details</h2>
+    <button type="button" class="modal-close" data-close-sheet aria-label="Close">&times;</button>
+  </div>
+  <div class="mco-sheet-body">
+    <!-- What the sheet shows at its peek detent: the title and this line. -->
+    <p class="detail-subtitle" id="detail-subtitle" data-peek></p>
 
     <div class="basin-controls">
       <div class="control-group">
-        <label class="control-label" for="station-date">Date</label>
+        <label class="control-label" for="detail-date">Date</label>
         <div class="date-stepper">
-          <input type="date" id="station-date">
-          <div class="date-step-btns">
-            <button type="button" class="nav-btn mco-step date-step" id="btn-station-prev" aria-label="Previous day">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            <button type="button" class="nav-btn mco-step date-step" id="btn-station-next" aria-label="Next day">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="18 15 12 9 6 15"/>
-              </svg>
-            </button>
-          </div>
+          <button type="button" class="nav-btn icon-only mco-step" id="btn-detail-prev" aria-label="Previous day">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <input type="date" id="detail-date">
+          <button type="button" class="nav-btn icon-only mco-step" id="btn-detail-next" aria-label="Next day">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
         </div>
       </div>
       <div class="control-group">
         <span class="control-label" aria-hidden="true">Normals</span>
-        <fieldset class="seg-btns is-radio" id="station-flavor-btns">
+        <fieldset class="seg-btns is-radio" id="detail-flavor-btns">
           <legend class="sr-only">Normals</legend>
-          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="smoothed" checked>Smoothed</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="fitted">Fitted</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="empirical">Empirical</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="detail-flavor" value="smoothed" checked>Smoothed</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="detail-flavor" value="fitted">Fitted</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="detail-flavor" value="empirical">Empirical</label>
         </fieldset>
+      </div>
+      <div class="control-group" data-basin-only>
+        <span class="control-label" aria-hidden="true">Plot</span>
+        <fieldset class="seg-btns is-radio" id="basin-plot-btns">
+          <legend class="sr-only">Plot</legend>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="swe" checked>SWE</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="hypsomeswe">HypsomeSWE</label>
+        </fieldset>
+      </div>
+      <!-- Shown once the list of animated water years has loaded; the select
+           only when there is more than one to choose from. -->
+      <div class="control-group" id="basin-anim-group" data-basin-only hidden>
+        <span class="control-label" aria-hidden="true">Animation</span>
+        <div class="basin-anim-ctl">
+          <select class="nav-select" id="basin-sy" aria-label="Water year to animate" hidden></select>
+          <button type="button" class="nav-btn" id="btn-basin-anim" aria-pressed="false">Play water year</button>
+        </div>
       </div>
     </div>
 
-    <figure class="basin-figure">
-      <div class="basin-frame" id="station-frame">
-        <!-- 1×1 transparent placeholder: src="" would re-request the page. -->
-        <img id="station-img" alt="" width="1500" height="1000"
-             src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
-        <div class="mco-empty" id="station-empty" hidden></div>
-      </div>
-      <figcaption class="basin-caption" id="station-caption"></figcaption>
-    </figure>
+    <!-- One SNOTEL station's SWE plot: one plot type (a station has no
+         elevation bands) and no animation. -->
+    <div id="station-panel" hidden>
+      <figure class="basin-figure">
+        <div class="basin-frame" id="station-frame">
+          <!-- 1×1 transparent placeholder: src="" would re-request the page. -->
+          <img id="station-img" alt="" width="1500" height="1000"
+               src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
+          <div class="mco-empty" id="station-empty" hidden></div>
+        </div>
+        <figcaption class="basin-caption" id="station-caption"></figcaption>
+      </figure>
 
-    <details class="basin-data">
-      <summary>Data for this plot</summary>
-      <div id="station-table"></div>
-    </details>
+      <details class="basin-data">
+        <summary>Data for this plot</summary>
+        <div id="station-table"></div>
+      </details>
+    </div>
+
+    <!-- One watershed's plot, or its water year's animation. -->
+    <div id="basin-panel" hidden>
+      <figure class="basin-figure">
+        <div class="basin-frame" id="basin-frame">
+          <!-- 1×1 transparent placeholder: src="" would re-request the page. -->
+          <img id="basin-img" alt="" width="2400" height="1600"
+               src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
+          <video id="basin-video" width="720" height="480" controls muted playsinline preload="none" hidden></video>
+          <div class="mco-empty" id="basin-empty" hidden></div>
+        </div>
+        <!-- Under the animation: a day (one frame) at a time. The date isn't a
+             live region — it changes twelve times a second while playing; a
+             step announces its own. -->
+        <div class="basin-frames" id="basin-frames" hidden>
+          <div class="basin-frames-step">
+            <button type="button" class="nav-btn icon-only mco-step" id="btn-frame-prev"
+                    aria-label="Previous day of the animation" aria-keyshortcuts="ArrowLeft">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+            <span class="basin-frame-date" id="basin-frame-date"></span>
+            <button type="button" class="nav-btn icon-only mco-step" id="btn-frame-next"
+                    aria-label="Next day of the animation" aria-keyshortcuts="ArrowRight">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+          <span class="basin-frames-hint" aria-hidden="true">← → step one day</span>
+        </div>
+        <figcaption class="basin-caption" id="basin-caption"></figcaption>
+      </figure>
+
+      <details class="basin-data" id="basin-data">
+        <summary>Data for this plot</summary>
+        <div id="basin-table"></div>
+      </details>
+    </div>
   </div>
-</dialog>
+</section>
 
 <dialog id="info-modal" class="mco-modal" aria-labelledby="info-modal-title">
   <div class="info-modal-box">
@@ -684,11 +757,13 @@
       <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
     </div>
 
-    <!-- Plain words first, method last (website VOICE.md). The method lives
-         in the legend's "About this data" dialog. Dates that move (the first
-         date with percentiles) are filled from app.js, never typed here. -->
+    <!-- The family's info outline (HOUSE-STYLE §1, kit 0.21.0): What this
+         shows · How to use it · Share or bookmark · Data. Plain words first,
+         method last (website VOICE.md). The method lives in the legend's
+         "About this data" dialog. Dates that move (the first date with
+         percentiles) are filled from app.js, never typed here. -->
     <div class="info-section">
-      <h3>About</h3>
+      <h3>What this shows</h3>
       <p>The map ranks each day's snowpack against the same calendar day in past years. A percentile
          of 50 is a typical amount of snow for that date. A percentile of 10 means only one past year
          in ten had less.</p>
@@ -696,10 +771,7 @@
          model of snow water equivalent (SWE): the depth of water the snowpack would make if it melted.
          It covers the lower 48 states on a 1&thinsp;km grid, once a day. Percentiles start on
          <span data-fill="earliest-date">September 1, 2025</span>.</p>
-    </div>
-
-    <div class="info-section">
-      <h3>What the colors mean</h3>
+      <h4>What the colors mean</h4>
       <p>The colors and category names follow the
          <a href="https://droughtmonitor.unl.edu" target="_blank" rel="noopener">U.S. Drought Monitor</a>.</p>
       <ul>
@@ -712,43 +784,7 @@
       <p>A place with no snow on a date when it is always bare reads 50, near normal.</p>
       <p>In the gridded view, a dashed line marks the edge of the SNODAS data: the lower 48 states
          and the Canadian part of the Columbia River basin. The map is blank outside it.</p>
-    </div>
-
-    <div class="info-section">
-      <h3>Using the explorer</h3>
-      <ul>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><strong>Search</strong>. Type a state, county, watershed, city, ski area or ZIP code
-            to go there. Press <kbd>/</kbd> to jump to the search box (add <code>?kbd=off</code> to the address to turn
-            that key off). A city or ZIP code is marked with a dot, and a watershed is outlined, as is a ski area
-            where OpenStreetMap maps its boundary.</li>
-        <li><strong>SNOTEL stations</strong>. Turn them on with <strong>SNOTEL</strong> in the bar at the top. Each NRCS SNOTEL station is colored by
-            its own SWE percentile for the date, against the same normals and reference years as the map, in the
-            same colors. A smaller grey dot has no reading for the date.
-            A station's reading is the one at midnight as the date begins, the moment SNODAS maps. NRCS dates that
-            reading the day before (the end of that day), and so do the station plots. Click or tap a station for its SWE plot; with a
-            keyboard, the stations in view are a table after the map.</li>
-        <li><strong>Ski runs</strong>. Zoom in on a ski area to see its name, downhill runs and lifts. Closer in, each run
-            carries its trail sign: a green circle, blue square, black diamond or double black diamond, from easiest to
-            experts only.
-            Runs and ratings are as mapped in OpenStreetMap, and some areas are mapped only in part.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg></span><strong>Date</strong>. Pick a day, or step one day at a time with ▲ and ▼.</li>
-        <li><strong>View</strong>. Gridded shows every 1&thinsp;km cell. Zonal averages over watersheds, from
-            the smallest (HUC8 subbasins, the default) to the largest (HUC2 regions); choose the size with Level.</li>
-        <li><strong>Normals</strong>. The past years each day is measured against. Smoothed is the default;
-            the three choices are explained below.</li>
-        <li><strong>Click or tap the map</strong>. In the gridded view this reads out the percentile at that
-            point. In the zonal view it opens that watershed's plots. With a keyboard, the watersheds
-            are also a table after the map: press <kbd>Enter</kbd> on a row to open its plots.</li>
-        <li><strong>Zoom and pan</strong>. Scroll or pinch to zoom and drag to pan. The buttons at top right
-            zoom in, zoom out, and return to the whole country.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><strong>Share</strong>. Copies a link to exactly this view, open plots included.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><strong>Export</strong>. Downloads the map as a PNG with its legend.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><strong>Theme</strong>. Switches between dark, light and high contrast.</li>
-      </ul>
-    </div>
-
-    <div class="info-section">
-      <h3>Which normals should I use?</h3>
+      <h4>Which normals should I use?</h4>
       <p>Each choice turns the past years for a date into a range of normal snow in a different way.</p>
       <ul>
         <li><strong>Smoothed</strong> (the default) fits one curve through the whole snow year, so each day's
@@ -763,9 +799,41 @@
     </div>
 
     <div class="info-section">
-      <h3>Watershed plots</h3>
-      <p>In the zonal view, click or tap a watershed for its plots. The date and normals in the plot
-         window are the map's own: change them there and the map changes too.</p>
+      <h3>How to use it</h3>
+      <p>The map opens on Montana. On a phone, the day stepper and search stay in the bar at the top,
+         and the other controls are under <strong>☰</strong>.</p>
+      <ul>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><strong>Search</strong>. Type a state, county, watershed, city, ski area or ZIP code
+            to go there. Press <kbd>/</kbd> to jump to the search box (add <code>?kbd=off</code> to the address to turn
+            that key off). A city or ZIP code is marked with a dot, and a watershed is outlined, as is a ski area
+            where OpenStreetMap maps its boundary.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></span><strong>Date</strong>. Pick a day, or step one day at a time with ‹ and ›.</li>
+        <li><strong>View</strong>. Gridded shows every 1&thinsp;km cell. Zonal averages over watersheds, from
+            the smallest (HUC8 subbasins, the default) to the largest (HUC2 regions); choose the size with Level.</li>
+        <li><strong>Normals</strong>. The past years each day is measured against. Smoothed is the default;
+            the three choices are explained above.</li>
+        <li><strong>SNOTEL stations</strong>. Turn them on with <strong>SNOTEL</strong> in the bar. Each NRCS SNOTEL station is colored by
+            its own SWE percentile for the date, against the same normals and reference years as the map, in the
+            same colors. A smaller grey dot has no reading for the date.
+            A station's reading is the one at midnight as the date begins, the moment SNODAS maps. NRCS dates that
+            reading the day before (the end of that day), and so do the station plots. Click or tap a station for its SWE plot; with a
+            keyboard, the stations in view are a table after the map.</li>
+        <li><strong>Ski runs</strong>. Zoom in on a ski area to see its name, downhill runs and lifts. Closer in, each run
+            carries its trail sign: a green circle, blue square, black diamond or double black diamond, from easiest to
+            experts only.
+            Runs and ratings are as mapped in OpenStreetMap, and some areas are mapped only in part.</li>
+        <li><strong>Click or tap the map</strong>. In the gridded view this reads out the percentile at that
+            point. In the zonal view it opens that watershed's plots. With a keyboard, the watersheds
+            are also a table after the map: press <kbd>Enter</kbd> on a row to open its plots.</li>
+        <li><strong>Zoom and pan</strong>. Scroll or pinch to zoom and drag to pan. The buttons at top right
+            zoom in, zoom out, and show the whole lower 48.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><strong>Theme</strong>. Switches between dark, light and high contrast.</li>
+      </ul>
+      <h4>Station and watershed plots</h4>
+      <p>A station's or a watershed's plots open in a panel beside the map, or at the bottom of the
+         screen on a phone, where you drag it up or tap its handle to see the whole plot. The date and
+         normals in the panel are the map's own: change them there and the map changes too.
+         <kbd>Esc</kbd>, the close button or the browser's Back button closes it.</p>
       <ul>
         <li><strong>SWE</strong> shows the watershed's snow water, in acre-feet, through the whole snow year
             (September 1 to August 31). The colored bands are the range of past years; the black line is
@@ -774,8 +842,18 @@
             band's percentile, its share of the median for the date, and its area.</li>
       </ul>
       <p>A watershed with no snow on the date and none in its normals has no HypsomeSWE plot. Plots are
-         not yet published for every date. When a date has none, the window offers the nearest date that
+         not yet published for every date. When a date has none, the panel offers the nearest date that
          does. <strong>Data for this plot</strong>, under each plot, lists its numbers.</p>
+    </div>
+
+    <div class="info-section">
+      <h3>Share or bookmark</h3>
+      <p>The address in your browser holds this exact view: the date, view, normals and map position,
+         and the station or watershed you have open. Bookmark it, or share it, to come back to the same view.</p>
+      <ul>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><strong>Share</strong>. Copies a link to exactly this view, open plots included.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><strong>Export</strong>. Downloads the map as a PNG with its legend.</li>
+      </ul>
     </div>
 
     <div class="info-section">
@@ -809,111 +887,6 @@
   </div>
 </dialog>
 
-<!-- One basin's plot, opened by clicking a watershed in the zonal view (or
-     Enter on its row in the table twin). Date and normals are the page's own
-     state — changing them here moves the map behind the dialog too; the plot
-     type is this dialog's. Opening pushes a history entry, so Back closes it.
-     The title is filled at open time; the dialog is named by it. -->
-<dialog id="basin-modal" class="mco-modal" aria-labelledby="basin-title">
-  <div class="info-modal-box basin-box">
-    <div class="info-modal-header">
-      <div>
-        <h2 class="info-modal-title" id="basin-title">Watershed</h2>
-        <p class="info-modal-subtitle" id="basin-subtitle"></p>
-      </div>
-      <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
-    </div>
-
-    <div class="basin-controls">
-      <div class="control-group">
-        <label class="control-label" for="basin-date">Date</label>
-        <div class="date-stepper">
-          <input type="date" id="basin-date">
-          <div class="date-step-btns">
-            <button type="button" class="nav-btn mco-step date-step" id="btn-basin-prev" aria-label="Previous day">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            <button type="button" class="nav-btn mco-step date-step" id="btn-basin-next" aria-label="Next day">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="18 15 12 9 6 15"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-      <div class="control-group">
-        <span class="control-label" aria-hidden="true">Normals</span>
-        <fieldset class="seg-btns is-radio" id="basin-flavor-btns">
-          <legend class="sr-only">Normals</legend>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="smoothed" checked>Smoothed</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="fitted">Fitted</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="empirical">Empirical</label>
-        </fieldset>
-      </div>
-      <div class="control-group">
-        <span class="control-label" aria-hidden="true">Plot</span>
-        <fieldset class="seg-btns is-radio" id="basin-plot-btns">
-          <legend class="sr-only">Plot</legend>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="swe" checked>SWE</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="hypsomeswe">HypsomeSWE</label>
-        </fieldset>
-      </div>
-      <!-- Shown once the list of animated water years has loaded; the select
-           only when there is more than one to choose from. -->
-      <div class="control-group" id="basin-anim-group" hidden>
-        <span class="control-label" aria-hidden="true">Animation</span>
-        <div class="basin-anim-ctl">
-          <select class="nav-select" id="basin-sy" aria-label="Water year to animate" hidden></select>
-          <button type="button" class="nav-btn" id="btn-basin-anim" aria-pressed="false">Play water year</button>
-        </div>
-      </div>
-    </div>
-
-    <figure class="basin-figure">
-      <div class="basin-frame" id="basin-frame">
-        <!-- 1×1 transparent placeholder: src="" would re-request the page. -->
-        <img id="basin-img" alt="" width="2400" height="1600"
-             src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
-        <video id="basin-video" width="720" height="480" controls muted playsinline preload="none" hidden></video>
-        <div class="mco-empty" id="basin-empty" hidden></div>
-      </div>
-      <!-- Under the animation: a day (one frame) at a time. The date isn't a
-           live region — it changes twelve times a second while playing; a
-           step announces its own. -->
-      <div class="basin-frames" id="basin-frames" hidden>
-        <div class="basin-frames-step">
-          <button type="button" class="nav-btn icon-only mco-step" id="btn-frame-prev"
-                  aria-label="Previous day of the animation" aria-keyshortcuts="ArrowLeft">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
-                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-          </button>
-          <span class="basin-frame-date" id="basin-frame-date"></span>
-          <button type="button" class="nav-btn icon-only mco-step" id="btn-frame-next"
-                  aria-label="Next day of the animation" aria-keyshortcuts="ArrowRight">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
-                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </button>
-        </div>
-        <span class="basin-frames-hint" aria-hidden="true">← → step one day</span>
-      </div>
-      <figcaption class="basin-caption" id="basin-caption"></figcaption>
-    </figure>
-
-    <details class="basin-data" id="basin-data">
-      <summary>Data for this plot</summary>
-      <div id="basin-table"></div>
-    </details>
-  </div>
-</dialog>
-
 <!-- Vendor libraries, all version-pinned and SRI-guarded. MapLibre is not
      among them: 6.x has no UMD build, so mco-map.js imports it on demand
      (MCO.map.loadMapLibre, awaited at the top of app.js) under the import
@@ -929,18 +902,18 @@
 <script src="https://cdn.jsdelivr.net/npm/flatgeobuf@3.38.0/dist/flatgeobuf-geojson.min.js"
         integrity="sha384-qaUb9sZ45HYxNQezOWPyOMTRR7yph9xtoAW8TyJGHen5BcUmaBIcDil9Yj48HGav"
         crossorigin="anonymous"></script>
-<!-- mco-web-style @0.18.0 (window.MCO / MCO.map). cog-protocol.js is the
+<!-- mco-web-style @0.21.0 (window.MCO / MCO.map). cog-protocol.js is the
      KIT's copy. SRI hashes are snippets/head.html's for this exact tag. No
      mco-palette.js: this app's data ramp is the USDM category scale,
      app-owned, and it draws no station markers. -->
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/core/mco-core.js"
-        integrity="sha384-p1xp/8iMEAyKW2P1ALbBQFZhoRVU5y1PYVkBd4wBM5LlNAEsz90nbkbLr/4tZ5RP"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/core/mco-core.js"
+        integrity="sha384-eHbZuRPKBgG8dW2fo3mGSf4H0gDV8mo7YIoQlNFtOicFiWzfB8AO4NLaZveI2hWZ"
         crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/map/mco-map.js"
-        integrity="sha384-TJcSjq9foMHwQ6wRRemH51xdfWJrZPjD2AVXY697GK17QFtFr+Hp2DdhBmTmw54W"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/map/mco-map.js"
+        integrity="sha384-32oDenYn7xmAVuf3lcodOgiHz/W1DHO4qI7kdVkAHo/JJjZc0Kw6AlCyZm2Re7NU"
         crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/map/cog-protocol.js"
-        integrity="sha384-8KfmwSk9894unD1VJPQLo2DlTUp7+wLpl0ViJpo2LYG1J61nyqQ4twyvubpHLaeY"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/map/cog-protocol.js"
+        integrity="sha384-9yj+drZu0fzoorpjvVuopXW7He6R73EklvzwXBRNgQIvCIunOVzdJXi0oVhvM2BW"
         crossorigin="anonymous"></script>
 
 <script src="app.js"></script>

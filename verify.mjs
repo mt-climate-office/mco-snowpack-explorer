@@ -325,11 +325,11 @@ console.log('\nThe page:');
   await ctx.close();
 }
 
-// Basin dialog: the SWE plot and its facts (median, range, mean from zonal_day),
-// then HypsomeSWE and its band table, then another flavor.
+// Basin in the detail panel: the SWE plot and its facts (median, range, mean
+// from zonal_day), then HypsomeSWE and its band table, then another flavor.
 {
   const plotShown = () => { const i = document.getElementById('basin-img');
-    return document.getElementById('basin-modal').open && !i.hidden && i.complete && i.naturalWidth > 100; };
+    return document.getElementById('detail-sheet').dataset.kind === 'basin' && !i.hidden && i.complete && i.naturalWidth > 100; };
   const { ctx, page, errors, data, ok } = await open(`?date=${D}&view=zonal&huc=${BASIN.length}&basin=${BASIN}&plot=swe`, { ready: plotShown });
   check(`[basin] the SWE plot for ${BASIN} shows`, ok);
   check('[basin] it is the v1 plot key', asked(data, new RegExp(`^snodas/zonal/daily/plots/${P}/${D}/smoothed/${BASIN}_swe_${P}_smoothed_${D}\\.png$`)));
@@ -344,7 +344,7 @@ console.log('\nThe page:');
   const bands = await page.evaluate(() => ({ n: document.querySelectorAll('#basin-table tbody tr').length, t: document.getElementById('basin-table').textContent.slice(0, 120) }));
   check('[basin] the elevation band table fills from zonal_day hypsomeswe', bands.n > 0
     && asked(data, new RegExp(`^snodas/zonal/daily/zones/${P}/${D}/zones_hypsomeswe_${P}_smoothed_${D}\\.parquet$`)), JSON.stringify(bands));
-  await page.click('#basin-flavor-btns input[value="fitted"]', { force: true });
+  await page.click('#detail-flavor-btns input[value="fitted"]', { force: true });
   await page.waitForTimeout(1500);
   const q = await page.evaluate(() => location.search);
   check('[basin] another flavor: ?flavor=fitted and its plot', /flavor=fitted/.test(q)
@@ -375,10 +375,11 @@ if (ANIM) {
   await ctx.close();
 }
 
-// SNOTEL: the stations with their percentiles, and one station's dialog.
+// SNOTEL: the stations with their percentiles, and one station in the
+// detail panel.
 {
   const shown = () => { const i = document.getElementById('station-img');
-    return document.getElementById('station-modal').open && !i.hidden && i.complete && i.naturalWidth > 100; };
+    return document.getElementById('detail-sheet').dataset.kind === 'station' && !i.hidden && i.complete && i.naturalWidth > 100; };
   const { ctx, page, errors, data, ok } = await open(`?date=${D}&snotel=on&station=${STATION}`, { ready: shown });
   check(`[snotel] station ${STATION}'s plot shows`, ok);
   check('[snotel] reads stations.parquet and the latest percentiles', asked(data, /^snotel\/stations\.parquet$/)

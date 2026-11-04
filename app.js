@@ -306,7 +306,7 @@
     const theme = MCO.getTheme();
     if (theme !== MCO.osTheme()) params.theme = theme;
     if (!kbdShortcuts) params.kbd = 'off';
-    if (_mapReady) Object.assign(params, MCO.map.cameraParamsIfDefault(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS }));
+    if (_mapReady) Object.assign(params, MCO.map.cameraParamsIfDefault(map, { bounds: HOME_BOUNDS, fitOpts: FIT_OPTS }));
     if (push) MCO.pushUrlState(params, { state });
     else MCO.replaceUrlState(params);
     updateMeta();
@@ -457,6 +457,12 @@
   // MapTiler keys are still in git history and should be revoked at the
   // vendors.
   const COG_BOUNDS = [[-124.733, 24.95], [-66.94, 52.875]];
+  // A fresh view opens on Montana (the kit's MT_FIT_BOUNDS, as every other
+  // MCO map does), and a link with no camera means that view: initialCamera
+  // and cameraParamsIfDefault share these bounds, so the opening view still
+  // writes no lng/lat/zoom. The lower 48 stay the map's extent: the zoom
+  // floor, the fit button and the SNOTEL clip are on COG_BOUNDS.
+  const HOME_BOUNDS = MCO.map.MT_FIT_BOUNDS;
   const FIT_OPTS   = { padding: 20 };
 
   // Check the starting date in parallel with the basemap style loading, and
@@ -469,13 +475,23 @@
   map = new maplibregl.Map({
     container: 'map',
     style: MCO.map.cartoStyleUrl(),
-    ...MCO.map.initialCamera(urlParams, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS }),
+    ...MCO.map.initialCamera(urlParams, { bounds: HOME_BOUNDS, fitOpts: FIT_OPTS }),
     canvasContextAttributes: { preserveDrawingBuffer: true }, // required for PNG export (MapLibre ≥ 5 option; unchanged in 6)
   });
 
   // House navigation: zoom buttons, top-right, no compass — rotation isn't a
   // feature here — with the full-extent button fused into the same group, and
   // the zoom floor that keeps the lower 48 filling the viewport.
+  //
+  // A view still on Montana stays on it when the map's frame changes size
+  // (the bar settles to its height as fonts and the kit's script land, a
+  // window is resized): refit, so the camera stays the default and the URL
+  // stays clean. The floor did this for free while the default was the
+  // lower 48 (its snap-back refits); Montana's fit is above the floor.
+  const isHome = () => Object.keys(MCO.map.cameraParamsIfDefault(map, { bounds: HOME_BOUNDS, fitOpts: FIT_OPTS })).length === 0;
+  let _atHome = !(urlParams.has('lng') && urlParams.has('lat') && urlParams.has('zoom'));
+  map.on('moveend', () => { _atHome = isHome(); });
+  map.on('resize', () => { if (_atHome && !isHome()) map.jumpTo(map.cameraForBounds(HOME_BOUNDS, FIT_OPTS)); });
   MCO.map.addNavigation(map);
   MCO.map.addFitControl(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS, title: 'Zoom to the lower 48' });
   const zoomFloor = MCO.map.installZoomFloor(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS });
@@ -693,12 +709,14 @@
     if (!map.getLayer('snotel')) {
       map.addLayer({
         id: 'snotel', type: 'circle', source: 'snotel', layout: { visibility: 'none' },
-        paint: {
-          'circle-radius': grow(0),
-          'circle-color': ['case', noRead, SNOTEL_NOREAD,
+        // The kit's one station paint (0.21.0), with this map's own fill,
+        // size and #222 edge: one network, so no network encoding to drop.
+        paint: MCO.map.stationPaint({
+          radius: grow(0),
+          fill: ['case', noRead, SNOTEL_NOREAD,
             ['step', ['get', 'ptile'], `rgb(${COLORS[0]})`, ...HUC_COLOR_STOPS]],
-          'circle-stroke-color': '#222222', 'circle-stroke-width': 1.5,
-        },
+          stroke: '#222222', strokeWidth: 1.5,
+        }),
       }, before);
     }
     if (!map.getLayer('snotel-focus')) {
@@ -832,10 +850,10 @@
     // URL-triggered export: fire only after the data layer is ready
     if (exportOnLoad) _initReady.then(exportMap);
 
-    // ?basin= opens its dialog in place: the entry already names it, so this
-    // replaces rather than pushes.
+    // ?basin= and ?station= open the panel: the entry already names them, so
+    // this replaces rather than pushes.
     if (askedBasin && !exportOnLoad) openBasin(askedBasin, { push: false });
-    if (askedStation && !exportOnLoad) openStation(askedStation, { push: false });
+    if (askedStation && !exportOnLoad) openStation(askedStation, { push: false, fly: true });
   });
 
   // The gridded view's layers — the raster and the domain outline — and the
@@ -871,7 +889,7 @@
     let d = dateStr;
     if (d < SNODAS_START)  { d = SNODAS_START;  showToast(`The earliest date is ${MCO.formatDateStr(d)}.`); }
     if (d > latestDate)    { d = latestDate;    showToast(`The latest date with data is ${MCO.formatDateStr(d)}.`); }
-    if (d === currentDate) { dateInput.value = d; basinDate.value = d; stationDate.value = d; return; }
+    if (d === currentDate) { dateInput.value = d; detailDate.value = d; return; }
 
     loading.start();
     if (!(await cogExists(d))) {
@@ -880,8 +898,7 @@
         loading.done();
         showToast(`No SNODAS data was found near ${MCO.formatDateStr(d)}.`, 5000);
         dateInput.value = currentDate;
-        basinDate.value = currentDate;
-        stationDate.value = currentDate;
+        detailDate.value = currentDate;
         return;
       }
       d = fallback;
@@ -1165,29 +1182,25 @@
   }
 
   // ── Back / Forward ────────────────────────────────────────────────────────
-  // The only pushed entry is a basin dialog's opening (HOUSE-STYLE §4
+  // The only pushed entry is the detail panel's opening (HOUSE-STYLE §4
   // drill-down); everything else is replaced. So a history move opens or
-  // closes the dialog, and otherwise follows the entry silently — it is
+  // closes the panel, and otherwise follows the entry silently — it is
   // already the URL.
   MCO.onUrlState((params) => {
-    // The dialog's own close stepped Back over its entry. That entry still
+    // The panel's own close stepped Back over its entry. That entry still
     // holds the date and normals from before it opened; the page keeps what
-    // the visitor chose inside the dialog, so rewrite it rather than follow.
+    // the visitor chose inside the panel, so rewrite it rather than follow.
     if (_backFromClose) { _backFromClose = false; writeUrl(); return; }
-    // Back from an open dialog closes it, and only that: the date and
+    // Back from an open panel closes it, and only that: the date and
     // normals chosen inside it stay, exactly as the × and Esc leave them.
-    if (stationModal.open && !isStationId(params.get('station'))) {
-      _closingFromHistory = true;
-      currentStation = null;
-      stationModal.close();
+    if (detailKind === 'station' && !isStationId(params.get('station'))) {
+      closeDetail({ fromHistory: true });
       MCO.announce('Station closed');
       writeUrl();
       return;
     }
-    if (basinModal.open && !isHuc(params.get('basin'))) {
-      _closingFromHistory = true;
-      currentBasin = null;   // the close event is async; this write must not carry it
-      basinModal.close();
+    if (detailKind === 'basin' && !isHuc(params.get('basin'))) {
+      closeDetail({ fromHistory: true });
       MCO.announce('Basin closed');
       writeUrl();
       return;
@@ -1207,8 +1220,8 @@
     const station = params.get('station');
     setSnotel(params.get('snotel') === 'on' || isStationId(station), { silent: true });
     const basin = params.get('basin');
-    if (isHuc(basin) && (!basinModal.open || currentBasin?.huc !== basin)) openBasin(basin, { push: false });
-    else if (isStationId(station) && (!stationModal.open || currentStation?.id !== station)) openStation(station, { push: false });
+    if (isHuc(basin) && currentBasin?.huc !== basin) openBasin(basin, { push: false });
+    else if (!isHuc(basin) && isStationId(station) && currentStation?.id !== station) openStation(station, { push: false, fly: true });
   });
 
   // ── Hover tooltip ─────────────────────────────────────────────────────────
@@ -1331,22 +1344,84 @@
     pinReading(r ? `${where}: ${r.lines.slice(1).join(', ')}` : `No snowpack data at ${where}`);
   });
 
-  // ── Basin dialog ──────────────────────────────────────────────────────────
+  // ── Detail panel ──────────────────────────────────────────────────────────
+  // A station's or a watershed's plots, in the kit's sheet (MCO.initSheet,
+  // HOUSE-STYLE §3: station detail at every width): docked at the right edge
+  // above compact, where the map stays usable beside it, and a bottom sheet
+  // with peek and full detents on compact. One panel, one detail at a time:
+  // opening a station closes the watershed it showed, and the reverse. Its
+  // date and normals controls are the page's own (setDate / setFlavor update
+  // every control bound to them, so the panel and the map can't drift
+  // apart); the plot type and the animation are the watershed's.
+  const sheetEl        = document.getElementById('detail-sheet');
+  const detailTitle    = document.getElementById('detail-title');
+  const detailSubtitle = document.getElementById('detail-subtitle');
+  const detailDate     = document.getElementById('detail-date');
+  const detailFlavorFs = document.getElementById('detail-flavor-btns');
+  const basinPanel     = document.getElementById('basin-panel');
+  const stationPanel   = document.getElementById('station-panel');
+  let detailKind = null;   // 'basin' | 'station' while the panel is open
+  // The docked panel starts under the bar, whatever its height.
+  MCO.metrics.observe('--chrome-h', document.getElementById('navbar'));
+  const sheet = MCO.initSheet({
+    sheet: sheetEl,
+    fallbackFocus: mainEl,
+    onState: (state) => { if (state === 'closed') onDetailClosed(); },
+  });
+
+  detailDate.min = SNODAS_START;
+  detailDate.max = latestDate;
+  detailDate.value = currentDate;
+  detailDate.addEventListener('change', () => {
+    if (isIsoDate(detailDate.value)) setDate(detailDate.value);
+    else detailDate.value = currentDate;
+  });
+  steppers.push(MCO.initStepper({
+    prev: document.getElementById('btn-detail-prev'), next: document.getElementById('btn-detail-next'), ...stepperOpts,
+  }));
+  detailFlavorFs.addEventListener('change', (e) => setFlavor(e.target.value));
+
+  // Show kind's half of the panel, clearing the other kind if it was open.
+  // True when the panel was already open (so the URL replaces, not pushes).
+  function showDetail(kind) {
+    const wasOpen = detailKind !== null;
+    if (wasOpen && detailKind !== kind) (detailKind === 'basin' ? clearBasin : clearStation)();
+    detailKind = kind;
+    sheetEl.dataset.kind = kind;
+    basinPanel.hidden = kind !== 'basin';
+    stationPanel.hidden = kind !== 'station';
+    return wasOpen;
+  }
+  function openSheet(wasOpen) { sheet.open(wasOpen ? sheet.state() : 'peek'); }
+
+  // Close (×, Esc, a drag below peek, or Back) has one path. If the panel
+  // pushed its entry, step Back over it, so the close button and the
+  // browser's Back land on the same entry and Forward reopens it; when Back
+  // itself closed it, the URL is already right. The kit returns focus to
+  // whatever opened it, or to <main>, never <body>.
+  let _closingFromHistory = false, _backFromClose = false;
+  function closeDetail({ fromHistory = false } = {}) {
+    if (!detailKind) return;
+    _closingFromHistory = fromHistory;
+    sheet.close();
+  }
+  function onDetailClosed() {
+    const kind = detailKind;
+    if (!kind) return;
+    detailKind = null;
+    delete sheetEl.dataset.kind;
+    (kind === 'basin' ? clearBasin : clearStation)();
+    if (_closingFromHistory) _closingFromHistory = false;
+    else if (history.state && history.state.mcoDetail) { _backFromClose = true; history.back(); }
+    else writeUrl();
+  }
+
+  // ── Basin plots ───────────────────────────────────────────────────────────
   // One watershed's SWE or HypsomeSWE plot, the PNGs mco-snodas renders per
   // period, date, flavor and HUC (zonal/daily/plots/{period}/{date}/{flavor}/
   // {huc}_{type}_{period}_{flavor}_{date}.png, with the period's
   // index_{period}_{date}.json written last as the "date complete" marker).
-  // The dialog has no state of its own beyond the basin and the plot type:
-  // its date and normals controls call the page's setDate / setFlavor, and
-  // those setters update every control bound to them, so the dialog and the
-  // map behind it can't drift apart.
   const plotsRoot = (p) => `${SNODAS_ROOT}/zonal/daily/plots/${p}`;
-  const basinModal    = document.getElementById('basin-modal');
-  const basinCtl      = MCO.initInfoModal({ dialog: basinModal });
-  const basinTitle    = document.getElementById('basin-title');
-  const basinSubtitle = document.getElementById('basin-subtitle');
-  const basinDate     = document.getElementById('basin-date');
-  const basinFlavorFs = document.getElementById('basin-flavor-btns');
   const basinPlotFs   = document.getElementById('basin-plot-btns');
   const basinAnimGrp  = document.getElementById('basin-anim-group');
   const basinSy       = document.getElementById('basin-sy');
@@ -1359,25 +1434,14 @@
   const basinData     = document.getElementById('basin-data');
   const basinTable    = document.getElementById('basin-table');
 
-  basinDate.min = SNODAS_START;
-  basinDate.max = latestDate;
-  basinDate.value = currentDate;
-  basinDate.addEventListener('change', () => {
-    if (isIsoDate(basinDate.value)) setDate(basinDate.value);
-    else basinDate.value = currentDate;
-  });
-  steppers.push(MCO.initStepper({
-    prev: document.getElementById('btn-basin-prev'), next: document.getElementById('btn-basin-next'), ...stepperOpts,
-  }));
-  basinFlavorFs.addEventListener('change', (e) => setFlavor(e.target.value));
   basinPlotFs.addEventListener('change', (e) => setPlotType(e.target.value));
 
   function checkRadio(fieldset, value) {
     for (const r of fieldset.querySelectorAll('input[type="radio"]')) r.checked = r.value === value;
   }
   function syncBasinControls() {
-    basinDate.value = currentDate;
-    checkRadio(basinFlavorFs, currentFlavor);
+    detailDate.value = currentDate;
+    checkRadio(detailFlavorFs, currentFlavor);
     checkRadio(basinPlotFs, currentPlot);
     syncAnimControls();
   }
@@ -1507,12 +1571,12 @@
   const onVideoFrame = () => { showFrame(); if (!basinVideo.paused) basinVideo.requestVideoFrameCallback?.(onVideoFrame); };
   basinVideo.addEventListener('play', () => basinVideo.requestVideoFrameCallback?.(onVideoFrame));
   for (const ev of ['loadedmetadata', 'timeupdate', 'seeked', 'pause']) basinVideo.addEventListener(ev, showFrame);
-  // ← / → step a day from anywhere in the dialog but a field or radio,
+  // ← / → step a day from anywhere in the panel but a field or radio,
   // whose arrows are their own. Capture, so the native controls of a
   // focused <video> don't also seek it by seconds.
-  basinModal.addEventListener('keydown', (e) => {
+  sheetEl.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || basinVideo.hidden) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || detailKind !== 'basin' || basinVideo.hidden) return;
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
     e.preventDefault();
@@ -1602,9 +1666,9 @@
 
   // ── Opening and closing ──
   // Opening is drill-down (HOUSE-STYLE §4): the first step pushes a history
-  // entry marked {mcoDetail}, so Back closes the dialog; changes made while
+  // entry marked {mcoDetail}, so Back closes the panel; changes made while
   // it is open replace that entry. A basin opens the zonal view at its own
-  // level, so the outline behind the dialog is the watershed it shows.
+  // level, so the outline beside the panel is the watershed it shows.
   async function openBasin(huc, { push = true } = {}) {
     huc = String(huc);
     if (!isHuc(huc)) return;
@@ -1612,7 +1676,7 @@
     let feature = null;
     try { feature = (await loadFgb(level)).find(f => String(f.properties.huc) === huc); } catch { /* below */ }
     if (!feature) { showToast(`No HUC${level} watershed ${huc} was found.`); return; }
-    const wasOpen = basinModal.open;
+    const wasOpen = showDetail('basin');
     currentBasin = { huc, name: feature.properties.name || `HUC${level} ${huc}`, level };
     if (currentView !== 'zonal') setView('zonal', { silent: true });
     if (level !== currentHucLevel) setHucLevel(level, { silent: true });
@@ -1620,16 +1684,12 @@
     setSearchHit(null);   // the basin's own outline takes over
     refreshTwinSelection();
     writeUrl(push && !wasOpen ? { push: true, state: { mcoDetail: huc } } : {});
-    if (!wasOpen) basinCtl.open();
+    openSheet(wasOpen);
     renderBasin();
   }
 
-  // Close (×, Esc, backdrop or Back) has one path. If this dialog pushed its
-  // entry, step Back over it, so the close button and the browser's Back
-  // land on the same entry and Forward reopens it; when Back itself closed
-  // it, the URL is already right.
-  let _closingFromHistory = false, _backFromClose = false;
-  basinModal.addEventListener('close', () => {
+  // What closing a watershed undoes: its outline, its animation, its row.
+  function clearBasin() {
     currentBasin = null;
     currentAnim = null;
     _basinSeq++;
@@ -1637,15 +1697,7 @@
     syncAnimControls();
     setSelected(null);
     refreshTwinSelection();
-    if (_closingFromHistory) _closingFromHistory = false;
-    else if (history.state && history.state.mcoDetail) { _backFromClose = true; history.back(); }
-    else writeUrl();
-    // A dialog opened from a deep link has no opener; never leave focus on
-    // <body>. The browser restores focus after this event, hence the tick.
-    setTimeout(() => {
-      if (!document.activeElement || document.activeElement === document.body) mainEl.focus();
-    }, 0);
-  });
+  }
 
   // ── Which dates have plots ──
   // The plot index is memoised per date, hits and misses alike. The list of
@@ -1826,8 +1878,8 @@
     const { huc, name, level } = currentBasin;
     const date = currentDate, flavor = currentFlavor, type = currentPlot;
     syncBasinControls();
-    basinTitle.textContent = name;
-    basinSubtitle.textContent = `HUC${level} · ${huc}`;
+    detailTitle.textContent = name;
+    detailSubtitle.textContent = `HUC${level} · ${huc}`;
     basinFrame.setAttribute('aria-busy', 'true');
     if (currentAnim) { renderAnim(seq); return; }
 
@@ -1841,7 +1893,7 @@
       if (seq !== _basinSeq) return;
       basinFrame.removeAttribute('aria-busy');
       showBasinEmpty(`Basin plots aren't available for ${MCO.formatDateStr(date)} yet.`,
-        near && { label: `Show ${MCO.formatDateStr(near)}`, onClick: () => setDate(near), focus: basinDate });
+        near && { label: `Show ${MCO.formatDateStr(near)}`, onClick: () => setDate(near), focus: detailDate });
       return;
     }
 
@@ -1856,7 +1908,7 @@
         showBasinEmpty(`No HypsomeSWE plot for ${name} on ${MCO.formatDateStr(date)}. The watershed has no snow on that date and none in its ${flavorName(flavor).toLowerCase()}.`,
           { label: 'Show the SWE plot', onClick: () => setPlotType('swe'), focus: basinPlotFs.querySelector('input[value="swe"]') });
       } else {
-        showBasinEmpty(`The plot for ${name} failed to load.`, { label: 'Retry', onClick: renderBasin, focus: basinDate });
+        showBasinEmpty(`The plot for ${name} failed to load.`, { label: 'Retry', onClick: renderBasin, focus: detailDate });
       }
       return;
     }
@@ -1909,7 +1961,7 @@
   // pinned kit tag, CORS-loaded (jsDelivr sends ACAO: *) so the canvas stays
   // exportable; img-src already allows cdn.jsdelivr.net. The fixed-color twin
   // is picked by the EXPORT's background, not the page theme.
-  const KIT_ASSETS = 'https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.20.0/assets';
+  const KIT_ASSETS = 'https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.0/assets';
   const WORDMARK_ASPECT = 432 / 159;   // the SVGs' viewBox
   const _wordmarks = new Map();        // 'on-dark' | 'on-light' → Promise<Image|null>
   function loadWordmark(variant) {
@@ -2102,17 +2154,23 @@
     });
   }
 
-  // ── Nav rail (kit 0.10.0) ─────────────────────────────────────────────────
-  // Landscape phones: the bar becomes a left rail; its menu button opens the
-  // drawer with the controls (focus in, page inert, Esc / scrim back to it).
-  // Export closes the drawer first, because the map has to be visible for it.
-  // The info button leaves it open: the dialog wins Esc and returns focus
-  // inside the drawer (HOUSE-STYLE §3 Short landscape).
+  // ── Phone bar (kit 0.21.0 compact drawer; 0.10.0 rail) ────────────────────
+  // On a phone the bar is one row (badge · date stepper · search · ☰) and ☰
+  // opens .mco-nav-drawer, holding the rest, as a right drawer under it; on a
+  // landscape phone the bar is the left rail and the drawer opens beside it.
+  // Both on the drawer contract: focus in, page inert, Esc / scrim back to
+  // the button that opened it. The bar's search button opens the drawer on
+  // the search field, which lives there. Export closes the drawer first,
+  // because the map has to be visible for it, and so does the info button:
+  // in the compact drawer everything but ☰, the dialog included, is inert
+  // while it is open.
   const rail = MCO.initNavRail({
     toggle: document.getElementById('btn-rail-menu'),
     drawer: document.getElementById('nav-drawer'),
     scrim:  document.getElementById('rail-scrim'),
+    search: { toggle: document.getElementById('btn-search-toggle'), input: document.getElementById('search-input') },
   });
+  const inDrawerMode = () => rail.isRail() || rail.isDrawerMode();
   document.getElementById('btn-export').addEventListener('click', () => {
     rail.close({ restoreFocus: false });
     exportMap();
@@ -2374,7 +2432,7 @@
     for (const id of SNOTEL_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
   }
 
-  // The on/off control: a toggle button in the navbar.
+  // The on/off control: a chip in the navbar (HOUSE-STYLE §5.7).
   const snotelBtn = document.getElementById('btn-snotel');
   function syncSnotelToggle() { snotelBtn.setAttribute('aria-pressed', String(snotelOn)); }
   syncSnotelToggle();
@@ -2384,7 +2442,7 @@
     if (on === snotelOn) return;
     snotelOn = on;
     syncSnotelToggle();
-    if (!on && stationModal.open) { currentStation = null; stationModal.close(); }
+    if (!on && detailKind === 'station') closeDetail();
     if (!silent) { writeUrl(); MCO.announce(on ? 'SNOTEL stations shown' : 'SNOTEL stations hidden'); }
     if (!_layersAdded) return;
     setSnotelVisible(on);
@@ -2443,65 +2501,52 @@
     };
   }
 
-  // ── The station dialog ──
+  // ── A station in the detail panel ──
   // One station's seasonal SWE plot, which mco-snotel renders per period,
   // date and flavor (daily/plots/{period}/{date}/{flavor}/
   // {station}_swe_{period}_{flavor}_{date}.png, with the period's
-  // index_{period}_{date}.json written last). Built like the basin dialog: its
-  // date and normals controls are the page's own, and there is one plot type,
-  // since a station has no elevation bands.
-  const stationModal    = document.getElementById('station-modal');
-  const stationCtl      = MCO.initInfoModal({ dialog: stationModal });
-  const stationTitle    = document.getElementById('station-title');
-  const stationSubtitle = document.getElementById('station-subtitle');
-  const stationDate     = document.getElementById('station-date');
-  const stationFlavorFs = document.getElementById('station-flavor-btns');
+  // index_{period}_{date}.json written last). Shown like a watershed's: the
+  // panel's date and normals controls are the page's own, and there is one
+  // plot type, since a station has no elevation bands.
   const stationFrame    = document.getElementById('station-frame');
   const stationImg      = document.getElementById('station-img');
   const stationEmpty    = document.getElementById('station-empty');
   const stationCaption  = document.getElementById('station-caption');
   const stationTable    = document.getElementById('station-table');
 
-  stationDate.min = SNODAS_START;
-  stationDate.max = latestDate;
-  stationDate.value = currentDate;
-  stationDate.addEventListener('change', () => {
-    if (isIsoDate(stationDate.value)) setDate(stationDate.value);
-    else stationDate.value = currentDate;
-  });
-  steppers.push(MCO.initStepper({
-    prev: document.getElementById('btn-station-prev'), next: document.getElementById('btn-station-next'), ...stepperOpts,
-  }));
-  stationFlavorFs.addEventListener('change', (e) => setFlavor(e.target.value));
-
   // Opening is drill-down, as a basin's: a pushed entry, so Back closes it.
-  async function openStation(id, { push = true } = {}) {
+  // A deep link (and Forward back onto one) flies to the station first if
+  // it is out of view, and opens once the map has settled there
+  // (MCO.map.flyToAndOpen); a click or a table-twin row is already in view.
+  async function openStation(id, { push = true, fly = false } = {}) {
     let st = null;
     try { st = (await loadStations()).find(x => x.id === id); } catch { /* below */ }
     if (!st) { showToast(`No SNOTEL station ${id} was found.`); return; }
-    const wasOpen = stationModal.open;
-    currentStation = st;
-    if (!snotelOn) setSnotel(true, { silent: true });
-    setSelectedStation(id);
-    renderStationTwin();
-    writeUrl(push && !wasOpen ? { push: true, state: { mcoDetail: `station:${id}` } } : {});
-    if (!wasOpen) stationCtl.open();
-    renderStation();
+    const show = () => {
+      const wasOpen = showDetail('station');
+      currentStation = st;
+      if (!snotelOn) setSnotel(true, { silent: true });
+      setSelectedStation(id);
+      renderStationTwin();
+      writeUrl(push && !wasOpen ? { push: true, state: { mcoDetail: `station:${id}` } } : {});
+      openSheet(wasOpen);
+      renderStation();
+    };
+    if (!fly) { show(); return; }
+    MCO.map.flyToAndOpen(map, {
+      center: [st.lon, st.lat],
+      ensureVisible: () => { if (!snotelOn) setSnotel(true, { silent: true }); },
+      open: show,
+    });
   }
 
-  // The basin dialog's single close path, for this one.
-  stationModal.addEventListener('close', () => {
+  // What closing a station undoes: its ring and its table-twin row.
+  function clearStation() {
     currentStation = null;
     _stationSeq++;
     setSelectedStation(null);
     renderStationTwin();
-    if (_closingFromHistory) _closingFromHistory = false;
-    else if (history.state && history.state.mcoDetail) { _backFromClose = true; history.back(); }
-    else writeUrl();
-    setTimeout(() => {
-      if (!document.activeElement || document.activeElement === document.body) mainEl.focus();
-    }, 0);
-  });
+  }
 
   // Which dates have station plots: as for the basins, from the snotel
   // bucket, in the period of d's water year. The index is the period's, so
@@ -2565,10 +2610,10 @@
     const st = currentStation;
     const date = currentDate, flavor = currentFlavor;
     const day = snotelDay(date);   // the station's own date for that moment
-    stationDate.value = date;
-    checkRadio(stationFlavorFs, flavor);
-    stationTitle.textContent = st.name;
-    stationSubtitle.textContent = `SNOTEL ${st.siteId} · ${st.county ? `${st.county} County, ` : ''}${st.state} · ${Math.round(st.elev).toLocaleString('en-US')} ft`;
+    detailDate.value = date;
+    checkRadio(detailFlavorFs, flavor);
+    detailTitle.textContent = st.name;
+    detailSubtitle.textContent = `SNOTEL ${st.siteId} · ${st.county ? `${st.county} County, ` : ''}${st.state} · ${Math.round(st.elev).toLocaleString('en-US')} ft`;
     stationFrame.setAttribute('aria-busy', 'true');
 
     // The numbers (the year's observed table can take seconds the first
@@ -2596,7 +2641,7 @@
       if (seq !== _stationSeq) return;
       stationFrame.removeAttribute('aria-busy');
       showStationEmpty(`Station plots aren't available for ${MCO.formatDateStr(date)} yet.`,
-        near && { label: `Show ${MCO.formatDateStr(near)}`, onClick: () => setDate(near), focus: stationDate });
+        near && { label: `Show ${MCO.formatDateStr(near)}`, onClick: () => setDate(near), focus: detailDate });
       return;
     }
 
@@ -2610,7 +2655,7 @@
       if (seq !== _stationSeq) return;
       showStationEmpty(obs?.swe ? `The plot for ${st.name} failed to load.`
         : `No plot for ${st.name} on ${MCO.formatDateStr(date)}. Stations are plotted once they have snow in the water year.`,
-        obs?.swe ? { label: 'Retry', onClick: renderStation, focus: stationDate } : null);
+        obs?.swe ? { label: 'Retry', onClick: renderStation, focus: detailDate } : null);
       return;
     }
     stationEmpty.hidden = true;
@@ -2632,8 +2677,8 @@
   // built from the Census Gazetteer by scripts/build-places.sh), ski areas
   // (data/ski/, above) and the watersheds the app already loads. The
   // combobox and its ranking are the kit's (MCO.initSearchBox,
-  // MCO.searchModel sections); the collapse below
-  // 640px is MCO.initSearchCollapse. A pick moves the camera only: the plot
+  // MCO.searchModel sections); below 640px the field is in the phone bar's
+  // drawer (MCO.initNavRail's search option). A pick moves the camera only: the plot
   // dialog still opens from a deliberate click.
   //
   // Point results stop at SEARCH_POINT_ZOOM, where a town shows with its
@@ -2762,22 +2807,11 @@
     limit: 30,
     sectionLimits: { States: 5, 'Cities and towns': 5, 'Ski areas': 5, Counties: 5, Watersheds: 5, 'ZIP codes': 8 },
   });
-  const searchCollapse = MCO.initSearchCollapse({
-    wrap: document.getElementById('search-wrap'),
-    toggle: btnSearchToggle,
-    input: searchInput,
-    onClose: () => searchBox.close(),
-  });
   searchInput.addEventListener('focus', () => loadSearchSources(searchInput.value));
   searchInput.addEventListener('input', () => loadSearchSources(searchInput.value));
   // The kit handles (and stops) the Esc that closes the list or clears the
-  // text; the one it passes through closes the overlay, one step at a time.
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !e.defaultPrevented && searchCollapse.isOpen()) {
-      e.preventDefault();
-      searchCollapse.close();
-    }
-  });
+  // text; the one it passes through closes the phone drawer (the kit's Esc
+  // stack), one step at a time.
 
   // Bumped on every change, so a ski area's outline that arrives after the
   // reader has moved on is dropped.
@@ -2793,10 +2827,9 @@
     if (!rec) return;
     const animate = !MCO.reducedMotion();
     // Focus stays in the field, unless the field is about to be hidden: the
-    // collapsed overlay hands it to its toggle, the rail drawer to its menu
-    // button, so it never drops to <body>.
-    if (rail.isRail()) rail.close();
-    else if (searchCollapse.isOpen()) searchCollapse.close();
+    // phone drawer hands it back to the button that opened it (the bar's
+    // search button or ☰), so it never drops to <body>.
+    if (inDrawerMode()) rail.close();
 
     if (rec.ski) {
       goToSkiArea(rec, animate);
@@ -2842,38 +2875,36 @@
     if (!kbdShortcuts || e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-    if (document.querySelector('dialog[open]')) return;
+    if (document.querySelector('dialog[open]') || MCO.overlay.isBlocking()) return;
     e.preventDefault();
-    if (rail.isRail()) { rail.open(searchInput); return; }
-    if (searchCollapse.isCollapsed()) { searchCollapse.open(); return; }
+    if (inDrawerMode()) { rail.open(searchInput, { opener: btnSearchToggle }); return; }
     searchInput.focus();
     searchInput.select();
   });
 
   // ── Info modal ────────────────────────────────────────────────────────────
   const infoModal = document.getElementById('info-modal');
-  MCO.initInfoModal({ dialog: infoModal, trigger: document.getElementById('btn-info') });
-  document.getElementById('info-credit').textContent = MCO.credit({ source: 'NOAA SNODAS' });
   // Dates that move are read from the code's own constants, never typed into copy.
   for (const el of document.querySelectorAll('[data-fill="earliest-date"]')) el.textContent = MCO.formatDateStr(SNODAS_START);
+  document.getElementById('info-credit').textContent = MCO.credit({ source: 'NOAA SNODAS' });
+  // The info button sits in the phone drawer: close it first (focus back to
+  // ☰, which the dialog then returns to). Registered before the kit's own
+  // listener, so the drawer is gone by the time the dialog opens.
+  const btnInfo = document.getElementById('btn-info');
+  btnInfo.addEventListener('click', () => { if (rail.isOpen()) rail.close(); });
 
-  // First-visit auto-open, once. Not over a deep link (someone following a
-  // shared view shouldn't land behind a help dialog), not in an export run,
-  // not over another dialog, and never once the visitor has started using
-  // the page — focus has left <body> (WCAG 3.2.1). The seen flag is written
-  // at open time, so an unclosed dialog still counts.
+  // First-visit auto-open, once (the kit's intro, 0.21.0): never over a deep
+  // link (someone following a shared view shouldn't land behind a help
+  // dialog), an export run or another dialog, and never once the visitor
+  // has started using the page — focus has left <body> (WCAG 3.2.1). The
+  // kit writes the seen flag as it opens. The key is the one this app has
+  // always used; the pre-0.18 key still counts as seen.
   const DEEP_LINK_PARAMS = ['date', 'view', 'huc', 'flavor', 'basin', 'station', 'snotel', 'lng', 'export'];
   const hasDeepLink = DEEP_LINK_PARAMS.some(k => urlParams.has(k));
-  const seenIntro = MCO.lsGet(LS_INFO_SEEN) === '1' || MCO.lsGet(LS_INFO_SEEN_OLD) === '1';
-  if (!seenIntro && !hasDeepLink) {
-    setTimeout(() => {
-      const idle = !document.activeElement || document.activeElement === document.body;
-      if (idle && !document.querySelector('dialog[open]')) {
-        infoModal.showModal();
-        MCO.lsSet(LS_INFO_SEEN, '1');
-      }
-    }, 350);
-  }
+  MCO.initInfoModal({
+    dialog: infoModal, trigger: btnInfo,
+    intro: { key: LS_INFO_SEEN, skip: () => hasDeepLink || MCO.lsGet(LS_INFO_SEEN_OLD) === '1' },
+  });
 
   // ── Provenance modal ──────────────────────────────────────────────────────
   const provenanceModal = document.getElementById('provenance-modal');
