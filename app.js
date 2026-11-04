@@ -306,7 +306,7 @@
     const theme = MCO.getTheme();
     if (theme !== MCO.osTheme()) params.theme = theme;
     if (!kbdShortcuts) params.kbd = 'off';
-    if (_mapReady) Object.assign(params, MCO.map.cameraParamsIfDefault(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS }));
+    if (_mapReady) Object.assign(params, MCO.map.cameraParamsIfDefault(map, { bounds: HOME_BOUNDS, fitOpts: FIT_OPTS }));
     if (push) MCO.pushUrlState(params, { state });
     else MCO.replaceUrlState(params);
     updateMeta();
@@ -457,6 +457,12 @@
   // MapTiler keys are still in git history and should be revoked at the
   // vendors.
   const COG_BOUNDS = [[-124.733, 24.95], [-66.94, 52.875]];
+  // A fresh view opens on Montana (the kit's MT_FIT_BOUNDS, as every other
+  // MCO map does), and a link with no camera means that view: initialCamera
+  // and cameraParamsIfDefault share these bounds, so the opening view still
+  // writes no lng/lat/zoom. The lower 48 stay the map's extent: the zoom
+  // floor, the fit button and the SNOTEL clip are on COG_BOUNDS.
+  const HOME_BOUNDS = MCO.map.MT_FIT_BOUNDS;
   const FIT_OPTS   = { padding: 20 };
 
   // Check the starting date in parallel with the basemap style loading, and
@@ -469,7 +475,7 @@
   map = new maplibregl.Map({
     container: 'map',
     style: MCO.map.cartoStyleUrl(),
-    ...MCO.map.initialCamera(urlParams, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS }),
+    ...MCO.map.initialCamera(urlParams, { bounds: HOME_BOUNDS, fitOpts: FIT_OPTS }),
     canvasContextAttributes: { preserveDrawingBuffer: true }, // required for PNG export (MapLibre ≥ 5 option; unchanged in 6)
   });
 
