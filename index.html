@@ -218,6 +218,9 @@
     /* The / hint goes once the field has focus. */
     #search-wrap:focus-within .search-kbd { opacity: 0; }
 
+    /* A sub-heading inside one of the info outline's four sections; the
+       kit styles only the section's <h3>. */
+    .info-section h4 { margin: 0.9rem 0 0.35rem; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
     .info-icon { display: inline-flex; align-items: center; vertical-align: middle; margin: 0 3px 1px 0; opacity: 0.8; }
     .info-icon svg { stroke: currentColor; }
 
@@ -752,11 +755,13 @@
       <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
     </div>
 
-    <!-- Plain words first, method last (website VOICE.md). The method lives
-         in the legend's "About this data" dialog. Dates that move (the first
-         date with percentiles) are filled from app.js, never typed here. -->
+    <!-- The family's info outline (HOUSE-STYLE §1, kit 0.21.0): What this
+         shows · How to use it · Share or bookmark · Data. Plain words first,
+         method last (website VOICE.md). The method lives in the legend's
+         "About this data" dialog. Dates that move (the first date with
+         percentiles) are filled from app.js, never typed here. -->
     <div class="info-section">
-      <h3>About</h3>
+      <h3>What this shows</h3>
       <p>The map ranks each day's snowpack against the same calendar day in past years. A percentile
          of 50 is a typical amount of snow for that date. A percentile of 10 means only one past year
          in ten had less.</p>
@@ -764,10 +769,7 @@
          model of snow water equivalent (SWE): the depth of water the snowpack would make if it melted.
          It covers the lower 48 states on a 1&thinsp;km grid, once a day. Percentiles start on
          <span data-fill="earliest-date">September 1, 2025</span>.</p>
-    </div>
-
-    <div class="info-section">
-      <h3>What the colors mean</h3>
+      <h4>What the colors mean</h4>
       <p>The colors and category names follow the
          <a href="https://droughtmonitor.unl.edu" target="_blank" rel="noopener">U.S. Drought Monitor</a>.</p>
       <ul>
@@ -780,43 +782,7 @@
       <p>A place with no snow on a date when it is always bare reads 50, near normal.</p>
       <p>In the gridded view, a dashed line marks the edge of the SNODAS data: the lower 48 states
          and the Canadian part of the Columbia River basin. The map is blank outside it.</p>
-    </div>
-
-    <div class="info-section">
-      <h3>Using the explorer</h3>
-      <ul>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><strong>Search</strong>. Type a state, county, watershed, city, ski area or ZIP code
-            to go there. Press <kbd>/</kbd> to jump to the search box (add <code>?kbd=off</code> to the address to turn
-            that key off). A city or ZIP code is marked with a dot, and a watershed is outlined, as is a ski area
-            where OpenStreetMap maps its boundary.</li>
-        <li><strong>SNOTEL stations</strong>. Turn them on with <strong>SNOTEL</strong> in the bar at the top. Each NRCS SNOTEL station is colored by
-            its own SWE percentile for the date, against the same normals and reference years as the map, in the
-            same colors. A smaller grey dot has no reading for the date.
-            A station's reading is the one at midnight as the date begins, the moment SNODAS maps. NRCS dates that
-            reading the day before (the end of that day), and so do the station plots. Click or tap a station for its SWE plot; with a
-            keyboard, the stations in view are a table after the map.</li>
-        <li><strong>Ski runs</strong>. Zoom in on a ski area to see its name, downhill runs and lifts. Closer in, each run
-            carries its trail sign: a green circle, blue square, black diamond or double black diamond, from easiest to
-            experts only.
-            Runs and ratings are as mapped in OpenStreetMap, and some areas are mapped only in part.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg></span><strong>Date</strong>. Pick a day, or step one day at a time with ▲ and ▼.</li>
-        <li><strong>View</strong>. Gridded shows every 1&thinsp;km cell. Zonal averages over watersheds, from
-            the smallest (HUC8 subbasins, the default) to the largest (HUC2 regions); choose the size with Level.</li>
-        <li><strong>Normals</strong>. The past years each day is measured against. Smoothed is the default;
-            the three choices are explained below.</li>
-        <li><strong>Click or tap the map</strong>. In the gridded view this reads out the percentile at that
-            point. In the zonal view it opens that watershed's plots. With a keyboard, the watersheds
-            are also a table after the map: press <kbd>Enter</kbd> on a row to open its plots.</li>
-        <li><strong>Zoom and pan</strong>. Scroll or pinch to zoom and drag to pan. The buttons at top right
-            zoom in, zoom out, and return to the whole country.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><strong>Share</strong>. Copies a link to exactly this view, open plots included.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><strong>Export</strong>. Downloads the map as a PNG with its legend.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><strong>Theme</strong>. Switches between dark, light and high contrast.</li>
-      </ul>
-    </div>
-
-    <div class="info-section">
-      <h3>Which normals should I use?</h3>
+      <h4>Which normals should I use?</h4>
       <p>Each choice turns the past years for a date into a range of normal snow in a different way.</p>
       <ul>
         <li><strong>Smoothed</strong> (the default) fits one curve through the whole snow year, so each day's
@@ -831,9 +797,41 @@
     </div>
 
     <div class="info-section">
-      <h3>Watershed plots</h3>
-      <p>In the zonal view, click or tap a watershed for its plots. The date and normals in the plot
-         window are the map's own: change them there and the map changes too.</p>
+      <h3>How to use it</h3>
+      <p>The map opens on Montana. On a phone, the day stepper and search stay in the bar at the top,
+         and the other controls are under <strong>☰</strong>.</p>
+      <ul>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><strong>Search</strong>. Type a state, county, watershed, city, ski area or ZIP code
+            to go there. Press <kbd>/</kbd> to jump to the search box (add <code>?kbd=off</code> to the address to turn
+            that key off). A city or ZIP code is marked with a dot, and a watershed is outlined, as is a ski area
+            where OpenStreetMap maps its boundary.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></span><strong>Date</strong>. Pick a day, or step one day at a time with ‹ and ›.</li>
+        <li><strong>View</strong>. Gridded shows every 1&thinsp;km cell. Zonal averages over watersheds, from
+            the smallest (HUC8 subbasins, the default) to the largest (HUC2 regions); choose the size with Level.</li>
+        <li><strong>Normals</strong>. The past years each day is measured against. Smoothed is the default;
+            the three choices are explained above.</li>
+        <li><strong>SNOTEL stations</strong>. Turn them on with <strong>SNOTEL</strong> in the bar. Each NRCS SNOTEL station is colored by
+            its own SWE percentile for the date, against the same normals and reference years as the map, in the
+            same colors. A smaller grey dot has no reading for the date.
+            A station's reading is the one at midnight as the date begins, the moment SNODAS maps. NRCS dates that
+            reading the day before (the end of that day), and so do the station plots. Click or tap a station for its SWE plot; with a
+            keyboard, the stations in view are a table after the map.</li>
+        <li><strong>Ski runs</strong>. Zoom in on a ski area to see its name, downhill runs and lifts. Closer in, each run
+            carries its trail sign: a green circle, blue square, black diamond or double black diamond, from easiest to
+            experts only.
+            Runs and ratings are as mapped in OpenStreetMap, and some areas are mapped only in part.</li>
+        <li><strong>Click or tap the map</strong>. In the gridded view this reads out the percentile at that
+            point. In the zonal view it opens that watershed's plots. With a keyboard, the watersheds
+            are also a table after the map: press <kbd>Enter</kbd> on a row to open its plots.</li>
+        <li><strong>Zoom and pan</strong>. Scroll or pinch to zoom and drag to pan. The buttons at top right
+            zoom in, zoom out, and show the whole lower 48.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><strong>Theme</strong>. Switches between dark, light and high contrast.</li>
+      </ul>
+      <h4>Station and watershed plots</h4>
+      <p>A station's or a watershed's plots open in a panel beside the map, or at the bottom of the
+         screen on a phone, where you drag it up or tap its handle to see the whole plot. The date and
+         normals in the panel are the map's own: change them there and the map changes too.
+         <kbd>Esc</kbd>, the close button or the browser's Back button closes it.</p>
       <ul>
         <li><strong>SWE</strong> shows the watershed's snow water, in acre-feet, through the whole snow year
             (September 1 to August 31). The colored bands are the range of past years; the black line is
@@ -842,8 +840,18 @@
             band's percentile, its share of the median for the date, and its area.</li>
       </ul>
       <p>A watershed with no snow on the date and none in its normals has no HypsomeSWE plot. Plots are
-         not yet published for every date. When a date has none, the window offers the nearest date that
+         not yet published for every date. When a date has none, the panel offers the nearest date that
          does. <strong>Data for this plot</strong>, under each plot, lists its numbers.</p>
+    </div>
+
+    <div class="info-section">
+      <h3>Share or bookmark</h3>
+      <p>The address in your browser holds this exact view: the date, view, normals and map position,
+         and the station or watershed you have open. Bookmark it, or share it, to come back to the same view.</p>
+      <ul>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><strong>Share</strong>. Copies a link to exactly this view, open plots included.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span><strong>Export</strong>. Downloads the map as a PNG with its legend.</li>
+      </ul>
     </div>
 
     <div class="info-section">

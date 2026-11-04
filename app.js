@@ -2874,28 +2874,27 @@
 
   // ── Info modal ────────────────────────────────────────────────────────────
   const infoModal = document.getElementById('info-modal');
-  MCO.initInfoModal({ dialog: infoModal, trigger: document.getElementById('btn-info') });
-  document.getElementById('info-credit').textContent = MCO.credit({ source: 'NOAA SNODAS' });
   // Dates that move are read from the code's own constants, never typed into copy.
   for (const el of document.querySelectorAll('[data-fill="earliest-date"]')) el.textContent = MCO.formatDateStr(SNODAS_START);
+  document.getElementById('info-credit').textContent = MCO.credit({ source: 'NOAA SNODAS' });
+  // The info button sits in the phone drawer: close it first (focus back to
+  // ☰, which the dialog then returns to). Registered before the kit's own
+  // listener, so the drawer is gone by the time the dialog opens.
+  const btnInfo = document.getElementById('btn-info');
+  btnInfo.addEventListener('click', () => { if (rail.isOpen()) rail.close(); });
 
-  // First-visit auto-open, once. Not over a deep link (someone following a
-  // shared view shouldn't land behind a help dialog), not in an export run,
-  // not over another dialog, and never once the visitor has started using
-  // the page — focus has left <body> (WCAG 3.2.1). The seen flag is written
-  // at open time, so an unclosed dialog still counts.
+  // First-visit auto-open, once (the kit's intro, 0.21.0): never over a deep
+  // link (someone following a shared view shouldn't land behind a help
+  // dialog), an export run or another dialog, and never once the visitor
+  // has started using the page — focus has left <body> (WCAG 3.2.1). The
+  // kit writes the seen flag as it opens. The key is the one this app has
+  // always used; the pre-0.18 key still counts as seen.
   const DEEP_LINK_PARAMS = ['date', 'view', 'huc', 'flavor', 'basin', 'station', 'snotel', 'lng', 'export'];
   const hasDeepLink = DEEP_LINK_PARAMS.some(k => urlParams.has(k));
-  const seenIntro = MCO.lsGet(LS_INFO_SEEN) === '1' || MCO.lsGet(LS_INFO_SEEN_OLD) === '1';
-  if (!seenIntro && !hasDeepLink) {
-    setTimeout(() => {
-      const idle = !document.activeElement || document.activeElement === document.body;
-      if (idle && !document.querySelector('dialog[open]')) {
-        infoModal.showModal();
-        MCO.lsSet(LS_INFO_SEEN, '1');
-      }
-    }, 350);
-  }
+  MCO.initInfoModal({
+    dialog: infoModal, trigger: btnInfo,
+    intro: { key: LS_INFO_SEEN, skip: () => hasDeepLink || MCO.lsGet(LS_INFO_SEEN_OLD) === '1' },
+  });
 
   // ── Provenance modal ──────────────────────────────────────────────────────
   const provenanceModal = document.getElementById('provenance-modal');
