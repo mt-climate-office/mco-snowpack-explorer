@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="mco-autolift">
 <head>
   <meta charset="UTF-8">
   <!-- Endpoints this page actually uses, and nothing else. script-src carries
@@ -256,11 +256,19 @@
       margin-top: 0.4rem;
     }
 
-    /* ── Basin dialog ──────────────────────────────────────────────────────────
-       The kit's dialog shell, wider: the plots are 3:2 at 2400×1600 and
-       unreadable at the shell's 540px. */
-    /* kit-override: .info-modal-box width, for the 3:2 plots. */
-    .info-modal-box.basin-box { width: min(980px, calc(100vw - 4rem)); }
+    /* ── Detail panel (kit .mco-sheet + MCO.initSheet) ─────────────────────────
+       A station's or a watershed's plots. The kit docks it at the right
+       edge (40vw at most) and makes it a bottom sheet on compact; it is
+       wider here than the kit's 360px because the plots are 3:2 and their
+       axis labels are small. */
+    #detail-sheet { --sheet-w: 560px; }
+    .detail-subtitle { margin: 0 0 0.75rem; font-size: 0.8rem; color: var(--text-secondary); }
+    /* kit-override: the map's right-hand controls (zoom and fit, the
+       attribution) move clear of the docked panel while it is open, so they
+       stay reachable and legible beside it. */
+    html:not(.is-compact) body:has(> #detail-sheet:not([hidden])) :is(.maplibregl-ctrl-top-right, .maplibregl-ctrl-bottom-right) {
+      right: min(var(--sheet-w, 560px), 40vw);
+    }
     .basin-controls {
       display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.25rem;
       margin-bottom: 0.9rem;
@@ -271,7 +279,7 @@
        same size as the plot it stands in for. */
     /* 720×480 is the animations' own size (animations/README.md): larger
        only blurs them. The plots take the same box, so starting an
-       animation doesn't resize it; on a short screen the dialog scrolls. */
+       animation doesn't resize it; on a short screen the panel scrolls. */
     .basin-frame {
       position: relative; aspect-ratio: 3 / 2;
       width: min(100%, 720px); margin-inline: auto;
@@ -281,10 +289,12 @@
     .basin-frame img, .basin-frame video { display: block; width: 100%; height: 100%; object-fit: contain; }
     .basin-anim-ctl { display: flex; gap: 0.4rem; align-items: center; }
     /* .control-group's and the frame's display rules outrank the UA's
-       [hidden]; inside the dialog, hidden means gone. */
-    .basin-box [hidden] { display: none; }
+       [hidden]; inside the panel, hidden means gone. */
+    #detail-sheet [hidden] { display: none; }
+    /* The plot type and the animation are a watershed's alone. */
+    #detail-sheet:not([data-kind="basin"]) [data-basin-only] { display: none; }
     /* kit-override: the empty state fills the plot's frame instead of
-       sitting in flow, so the dialog doesn't change height. */
+       sitting in flow, so the panel doesn't change height. */
     .basin-frame .mco-empty {
       position: absolute; inset: 0; margin: 0; border: 0; border-radius: 0;
       flex-direction: column; gap: 0.75rem;
@@ -295,7 +305,8 @@
     .basin-frames-step { grid-column: 2; display: flex; align-items: center; gap: 0.5rem; }
     .basin-frame-date { min-width: 13.5em; text-align: center; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
     .basin-frames-hint { justify-self: end; font-size: 0.75rem; color: var(--text-muted); }
-    @media (max-width: 750px) { .basin-frames-hint { display: none; } }
+    /* The hint needs the room of the wide docked panel (40vw). */
+    @media (max-width: 1200px) { .basin-frames-hint { display: none; } }
     .basin-caption { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.4rem; }
     .basin-caption a { color: var(--text-secondary); }
     .basin-data { margin-top: 0.9rem; font-size: 0.8rem; }
@@ -569,7 +580,9 @@
        after the map. -->
   <div id="map" role="application" aria-label="SWE percentile map"></div>
 
-  <aside id="legend" class="mco-panel" aria-labelledby="legend-title">
+  <!-- data-autolift (kit 0.13.0, with html.mco-autolift): on compact the
+       legend rides up with the bottom sheet instead of sitting under it. -->
+  <aside id="legend" class="mco-panel" aria-labelledby="legend-title" data-autolift>
     <div class="mco-panel-head">
       <h2 id="legend-title" class="mco-panel-title">SWE percentile</h2>
       <button type="button" class="nav-btn icon-only" id="legend-info-btn" aria-label="About this data">
@@ -600,66 +613,134 @@
      click-to-pin reading writes to, and the table twin. -->
 <div id="tooltip" class="mco-tooltip" aria-hidden="true"></div>
 
-<!-- One SNOTEL station's SWE plot: the basin dialog's frame and classes,
-     with one plot type (a station has no elevation bands) and no animation. -->
-<dialog id="station-modal" class="mco-modal" aria-labelledby="station-title">
-  <div class="info-modal-box basin-box">
-    <div class="info-modal-header">
-      <div>
-        <h2 class="info-modal-title" id="station-title">SNOTEL station</h2>
-        <p class="info-modal-subtitle" id="station-subtitle"></p>
-      </div>
-      <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
-    </div>
+<!-- The detail panel (kit MCO.initSheet, 0.21.0): docked at the right edge
+     above compact, a bottom sheet with peek and full detents on compact.
+     It shows one thing at a time, a SNOTEL station (click a station, or
+     Enter on its row in the table twin) or a watershed (click one in the
+     zonal view, or Enter on its row), and is not modal: the map stays
+     usable beside it. Date and normals are the page's own state, so
+     changing them here moves the map too; the plot type and the animation
+     are the watershed's. Opening pushes a history entry, so Back closes it.
+     The title is filled at open time; the panel is named by it. -->
+<section class="mco-sheet" id="detail-sheet" aria-labelledby="detail-title" data-state="closed" hidden>
+  <div class="mco-sheet-head">
+    <button type="button" class="mco-sheet-grip" aria-label="Expand details" aria-expanded="false"></button>
+    <h2 class="mco-sheet-title" id="detail-title" tabindex="-1">Details</h2>
+    <button type="button" class="modal-close" data-close-sheet aria-label="Close">&times;</button>
+  </div>
+  <div class="mco-sheet-body">
+    <!-- What the sheet shows at its peek detent: the title and this line. -->
+    <p class="detail-subtitle" id="detail-subtitle" data-peek></p>
 
     <div class="basin-controls">
       <div class="control-group">
-        <label class="control-label" for="station-date">Date</label>
+        <label class="control-label" for="detail-date">Date</label>
         <div class="date-stepper">
-          <input type="date" id="station-date">
-          <div class="date-step-btns">
-            <button type="button" class="nav-btn mco-step date-step" id="btn-station-prev" aria-label="Previous day">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            <button type="button" class="nav-btn mco-step date-step" id="btn-station-next" aria-label="Next day">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="18 15 12 9 6 15"/>
-              </svg>
-            </button>
-          </div>
+          <button type="button" class="nav-btn icon-only mco-step" id="btn-detail-prev" aria-label="Previous day">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <input type="date" id="detail-date">
+          <button type="button" class="nav-btn icon-only mco-step" id="btn-detail-next" aria-label="Next day">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
         </div>
       </div>
       <div class="control-group">
         <span class="control-label" aria-hidden="true">Normals</span>
-        <fieldset class="seg-btns is-radio" id="station-flavor-btns">
+        <fieldset class="seg-btns is-radio" id="detail-flavor-btns">
           <legend class="sr-only">Normals</legend>
-          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="smoothed" checked>Smoothed</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="fitted">Fitted</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="station-flavor" value="empirical">Empirical</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="detail-flavor" value="smoothed" checked>Smoothed</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="detail-flavor" value="fitted">Fitted</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="detail-flavor" value="empirical">Empirical</label>
         </fieldset>
+      </div>
+      <div class="control-group" data-basin-only>
+        <span class="control-label" aria-hidden="true">Plot</span>
+        <fieldset class="seg-btns is-radio" id="basin-plot-btns">
+          <legend class="sr-only">Plot</legend>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="swe" checked>SWE</label>
+          <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="hypsomeswe">HypsomeSWE</label>
+        </fieldset>
+      </div>
+      <!-- Shown once the list of animated water years has loaded; the select
+           only when there is more than one to choose from. -->
+      <div class="control-group" id="basin-anim-group" data-basin-only hidden>
+        <span class="control-label" aria-hidden="true">Animation</span>
+        <div class="basin-anim-ctl">
+          <select class="nav-select" id="basin-sy" aria-label="Water year to animate" hidden></select>
+          <button type="button" class="nav-btn" id="btn-basin-anim" aria-pressed="false">Play water year</button>
+        </div>
       </div>
     </div>
 
-    <figure class="basin-figure">
-      <div class="basin-frame" id="station-frame">
-        <!-- 1×1 transparent placeholder: src="" would re-request the page. -->
-        <img id="station-img" alt="" width="1500" height="1000"
-             src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
-        <div class="mco-empty" id="station-empty" hidden></div>
-      </div>
-      <figcaption class="basin-caption" id="station-caption"></figcaption>
-    </figure>
+    <!-- One SNOTEL station's SWE plot: one plot type (a station has no
+         elevation bands) and no animation. -->
+    <div id="station-panel" hidden>
+      <figure class="basin-figure">
+        <div class="basin-frame" id="station-frame">
+          <!-- 1×1 transparent placeholder: src="" would re-request the page. -->
+          <img id="station-img" alt="" width="1500" height="1000"
+               src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
+          <div class="mco-empty" id="station-empty" hidden></div>
+        </div>
+        <figcaption class="basin-caption" id="station-caption"></figcaption>
+      </figure>
 
-    <details class="basin-data">
-      <summary>Data for this plot</summary>
-      <div id="station-table"></div>
-    </details>
+      <details class="basin-data">
+        <summary>Data for this plot</summary>
+        <div id="station-table"></div>
+      </details>
+    </div>
+
+    <!-- One watershed's plot, or its water year's animation. -->
+    <div id="basin-panel" hidden>
+      <figure class="basin-figure">
+        <div class="basin-frame" id="basin-frame">
+          <!-- 1×1 transparent placeholder: src="" would re-request the page. -->
+          <img id="basin-img" alt="" width="2400" height="1600"
+               src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
+          <video id="basin-video" width="720" height="480" controls muted playsinline preload="none" hidden></video>
+          <div class="mco-empty" id="basin-empty" hidden></div>
+        </div>
+        <!-- Under the animation: a day (one frame) at a time. The date isn't a
+             live region — it changes twelve times a second while playing; a
+             step announces its own. -->
+        <div class="basin-frames" id="basin-frames" hidden>
+          <div class="basin-frames-step">
+            <button type="button" class="nav-btn icon-only mco-step" id="btn-frame-prev"
+                    aria-label="Previous day of the animation" aria-keyshortcuts="ArrowLeft">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+            <span class="basin-frame-date" id="basin-frame-date"></span>
+            <button type="button" class="nav-btn icon-only mco-step" id="btn-frame-next"
+                    aria-label="Next day of the animation" aria-keyshortcuts="ArrowRight">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+          <span class="basin-frames-hint" aria-hidden="true">← → step one day</span>
+        </div>
+        <figcaption class="basin-caption" id="basin-caption"></figcaption>
+      </figure>
+
+      <details class="basin-data" id="basin-data">
+        <summary>Data for this plot</summary>
+        <div id="basin-table"></div>
+      </details>
+    </div>
   </div>
-</dialog>
+</section>
 
 <dialog id="info-modal" class="mco-modal" aria-labelledby="info-modal-title">
   <div class="info-modal-box">
@@ -793,111 +874,6 @@
       <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
     </div>
     <div id="provenance-content"></div>
-  </div>
-</dialog>
-
-<!-- One basin's plot, opened by clicking a watershed in the zonal view (or
-     Enter on its row in the table twin). Date and normals are the page's own
-     state — changing them here moves the map behind the dialog too; the plot
-     type is this dialog's. Opening pushes a history entry, so Back closes it.
-     The title is filled at open time; the dialog is named by it. -->
-<dialog id="basin-modal" class="mco-modal" aria-labelledby="basin-title">
-  <div class="info-modal-box basin-box">
-    <div class="info-modal-header">
-      <div>
-        <h2 class="info-modal-title" id="basin-title">Watershed</h2>
-        <p class="info-modal-subtitle" id="basin-subtitle"></p>
-      </div>
-      <button type="button" class="modal-close" aria-label="Close" data-close-modal>&times;</button>
-    </div>
-
-    <div class="basin-controls">
-      <div class="control-group">
-        <label class="control-label" for="basin-date">Date</label>
-        <div class="date-stepper">
-          <input type="date" id="basin-date">
-          <div class="date-step-btns">
-            <button type="button" class="nav-btn mco-step date-step" id="btn-basin-prev" aria-label="Previous day">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            <button type="button" class="nav-btn mco-step date-step" id="btn-basin-next" aria-label="Next day">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                   stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="18 15 12 9 6 15"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-      <div class="control-group">
-        <span class="control-label" aria-hidden="true">Normals</span>
-        <fieldset class="seg-btns is-radio" id="basin-flavor-btns">
-          <legend class="sr-only">Normals</legend>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="smoothed" checked>Smoothed</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="fitted">Fitted</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-flavor" value="empirical">Empirical</label>
-        </fieldset>
-      </div>
-      <div class="control-group">
-        <span class="control-label" aria-hidden="true">Plot</span>
-        <fieldset class="seg-btns is-radio" id="basin-plot-btns">
-          <legend class="sr-only">Plot</legend>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="swe" checked>SWE</label>
-          <label class="nav-btn seg-btn"><input type="radio" name="basin-plot" value="hypsomeswe">HypsomeSWE</label>
-        </fieldset>
-      </div>
-      <!-- Shown once the list of animated water years has loaded; the select
-           only when there is more than one to choose from. -->
-      <div class="control-group" id="basin-anim-group" hidden>
-        <span class="control-label" aria-hidden="true">Animation</span>
-        <div class="basin-anim-ctl">
-          <select class="nav-select" id="basin-sy" aria-label="Water year to animate" hidden></select>
-          <button type="button" class="nav-btn" id="btn-basin-anim" aria-pressed="false">Play water year</button>
-        </div>
-      </div>
-    </div>
-
-    <figure class="basin-figure">
-      <div class="basin-frame" id="basin-frame">
-        <!-- 1×1 transparent placeholder: src="" would re-request the page. -->
-        <img id="basin-img" alt="" width="2400" height="1600"
-             src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
-        <video id="basin-video" width="720" height="480" controls muted playsinline preload="none" hidden></video>
-        <div class="mco-empty" id="basin-empty" hidden></div>
-      </div>
-      <!-- Under the animation: a day (one frame) at a time. The date isn't a
-           live region — it changes twelve times a second while playing; a
-           step announces its own. -->
-      <div class="basin-frames" id="basin-frames" hidden>
-        <div class="basin-frames-step">
-          <button type="button" class="nav-btn icon-only mco-step" id="btn-frame-prev"
-                  aria-label="Previous day of the animation" aria-keyshortcuts="ArrowLeft">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
-                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-          </button>
-          <span class="basin-frame-date" id="basin-frame-date"></span>
-          <button type="button" class="nav-btn icon-only mco-step" id="btn-frame-next"
-                  aria-label="Next day of the animation" aria-keyshortcuts="ArrowRight">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
-                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-          </button>
-        </div>
-        <span class="basin-frames-hint" aria-hidden="true">← → step one day</span>
-      </div>
-      <figcaption class="basin-caption" id="basin-caption"></figcaption>
-    </figure>
-
-    <details class="basin-data" id="basin-data">
-      <summary>Data for this plot</summary>
-      <div id="basin-table"></div>
-    </details>
   </div>
 </dialog>
 
