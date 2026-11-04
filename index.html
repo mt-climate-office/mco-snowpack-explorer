@@ -206,6 +206,7 @@
        (HOUSE-STYLE §3: "search narrowed"). With the zonal view's three
        groups and the date stepper this bar is short of room above 1060px. */
     .mco-search .mco-search-input { width: 160px; padding-right: 30px; }
+    /* kit-override: the 1400 rung's narrower field (above). */
     @media (max-width: 1400px) { .mco-search .mco-search-input { width: 130px; } }
     #search-input::-webkit-search-cancel-button { filter: var(--ctrl-icon-filter, none); }
     .search-kbd {
@@ -218,8 +219,8 @@
     /* The / hint goes once the field has focus. */
     #search-wrap:focus-within .search-kbd { opacity: 0; }
 
-    /* A sub-heading inside one of the info outline's four sections; the
-       kit styles only the section's <h3>. */
+    /* kit-override: a sub-heading inside one of the info outline's four
+       sections; the kit styles only the section's <h3>. */
     .info-section h4 { margin: 0.9rem 0 0.35rem; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
     .info-icon { display: inline-flex; align-items: center; vertical-align: middle; margin: 0 3px 1px 0; opacity: 0.8; }
     .info-icon svg { stroke: currentColor; }
@@ -352,6 +353,7 @@
         white-space: nowrap; align-self: center;
       }
       .rail-readout span { display: block; }
+      /* kit-override: more air between the drawer's control groups. */
       .mco-nav-drawer .controls { gap: 0.75rem; }
       /* kit-override: the drawer stacks each label over its control. */
       .mco-nav-drawer .control-group { flex-direction: column; align-items: stretch; gap: 0.25rem; }
