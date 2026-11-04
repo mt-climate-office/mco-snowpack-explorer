@@ -699,12 +699,14 @@
     if (!map.getLayer('snotel')) {
       map.addLayer({
         id: 'snotel', type: 'circle', source: 'snotel', layout: { visibility: 'none' },
-        paint: {
-          'circle-radius': grow(0),
-          'circle-color': ['case', noRead, SNOTEL_NOREAD,
+        // The kit's one station paint (0.21.0), with this map's own fill,
+        // size and #222 edge: one network, so no network encoding to drop.
+        paint: MCO.map.stationPaint({
+          radius: grow(0),
+          fill: ['case', noRead, SNOTEL_NOREAD,
             ['step', ['get', 'ptile'], `rgb(${COLORS[0]})`, ...HUC_COLOR_STOPS]],
-          'circle-stroke-color': '#222222', 'circle-stroke-width': 1.5,
-        },
+          stroke: '#222222', strokeWidth: 1.5,
+        }),
       }, before);
     }
     if (!map.getLayer('snotel-focus')) {
