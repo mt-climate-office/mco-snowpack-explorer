@@ -482,6 +482,16 @@
   // House navigation: zoom buttons, top-right, no compass — rotation isn't a
   // feature here — with the full-extent button fused into the same group, and
   // the zoom floor that keeps the lower 48 filling the viewport.
+  //
+  // A view still on Montana stays on it when the map's frame changes size
+  // (the bar settles to its height as fonts and the kit's script land, a
+  // window is resized): refit, so the camera stays the default and the URL
+  // stays clean. The floor did this for free while the default was the
+  // lower 48 (its snap-back refits); Montana's fit is above the floor.
+  const isHome = () => Object.keys(MCO.map.cameraParamsIfDefault(map, { bounds: HOME_BOUNDS, fitOpts: FIT_OPTS })).length === 0;
+  let _atHome = !(urlParams.has('lng') && urlParams.has('lat') && urlParams.has('zoom'));
+  map.on('moveend', () => { _atHome = isHome(); });
+  map.on('resize', () => { if (_atHome && !isHome()) map.jumpTo(map.cameraForBounds(HOME_BOUNDS, FIT_OPTS)); });
   MCO.map.addNavigation(map);
   MCO.map.addFitControl(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS, title: 'Zoom to the lower 48' });
   const zoomFloor = MCO.map.installZoomFloor(map, { bounds: COG_BOUNDS, fitOpts: FIT_OPTS });
