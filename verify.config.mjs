@@ -61,9 +61,10 @@ function stationShown() {
 
 // The phone bar's drawer is open (kit 0.21.0 compact drawer; the landscape
 // rail's below 560px tall). Above compact there is no drawer, and the bar
-// is the scenario. Opens it once.
+// is the scenario. Opens it once. Self-contained: the harness runs it in the
+// page, where this file's other functions don't exist.
 function drawerOpen() {
-  if (!matchMedia('(max-width: 640px), (max-height: 560px)').matches) return painted();
+  if (!matchMedia('(max-width: 640px), (max-height: 560px)').matches) return document.readyState === 'complete';
   const d = document.getElementById('nav-drawer');
   if (!d.classList.contains('is-open')) document.getElementById('btn-rail-menu').click();
   return d.classList.contains('is-open') && document.getElementById('main').inert;
