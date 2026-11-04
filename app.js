@@ -2108,17 +2108,23 @@
     });
   }
 
-  // ── Nav rail (kit 0.10.0) ─────────────────────────────────────────────────
-  // Landscape phones: the bar becomes a left rail; its menu button opens the
-  // drawer with the controls (focus in, page inert, Esc / scrim back to it).
-  // Export closes the drawer first, because the map has to be visible for it.
-  // The info button leaves it open: the dialog wins Esc and returns focus
-  // inside the drawer (HOUSE-STYLE §3 Short landscape).
+  // ── Phone bar (kit 0.21.0 compact drawer; 0.10.0 rail) ────────────────────
+  // On a phone the bar is one row (badge · date stepper · search · ☰) and ☰
+  // opens .mco-nav-drawer, holding the rest, as a right drawer under it; on a
+  // landscape phone the bar is the left rail and the drawer opens beside it.
+  // Both on the drawer contract: focus in, page inert, Esc / scrim back to
+  // the button that opened it. The bar's search button opens the drawer on
+  // the search field, which lives there. Export closes the drawer first,
+  // because the map has to be visible for it, and so does the info button:
+  // in the compact drawer everything but ☰, the dialog included, is inert
+  // while it is open.
   const rail = MCO.initNavRail({
     toggle: document.getElementById('btn-rail-menu'),
     drawer: document.getElementById('nav-drawer'),
     scrim:  document.getElementById('rail-scrim'),
+    search: { toggle: document.getElementById('btn-search-toggle'), input: document.getElementById('search-input') },
   });
+  const inDrawerMode = () => rail.isRail() || rail.isDrawerMode();
   document.getElementById('btn-export').addEventListener('click', () => {
     rail.close({ restoreFocus: false });
     exportMap();
@@ -2380,7 +2386,7 @@
     for (const id of SNOTEL_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
   }
 
-  // The on/off control: a toggle button in the navbar.
+  // The on/off control: a chip in the navbar (HOUSE-STYLE §5.7).
   const snotelBtn = document.getElementById('btn-snotel');
   function syncSnotelToggle() { snotelBtn.setAttribute('aria-pressed', String(snotelOn)); }
   syncSnotelToggle();
@@ -2638,8 +2644,8 @@
   // built from the Census Gazetteer by scripts/build-places.sh), ski areas
   // (data/ski/, above) and the watersheds the app already loads. The
   // combobox and its ranking are the kit's (MCO.initSearchBox,
-  // MCO.searchModel sections); the collapse below
-  // 640px is MCO.initSearchCollapse. A pick moves the camera only: the plot
+  // MCO.searchModel sections); below 640px the field is in the phone bar's
+  // drawer (MCO.initNavRail's search option). A pick moves the camera only: the plot
   // dialog still opens from a deliberate click.
   //
   // Point results stop at SEARCH_POINT_ZOOM, where a town shows with its
@@ -2768,22 +2774,11 @@
     limit: 30,
     sectionLimits: { States: 5, 'Cities and towns': 5, 'Ski areas': 5, Counties: 5, Watersheds: 5, 'ZIP codes': 8 },
   });
-  const searchCollapse = MCO.initSearchCollapse({
-    wrap: document.getElementById('search-wrap'),
-    toggle: btnSearchToggle,
-    input: searchInput,
-    onClose: () => searchBox.close(),
-  });
   searchInput.addEventListener('focus', () => loadSearchSources(searchInput.value));
   searchInput.addEventListener('input', () => loadSearchSources(searchInput.value));
   // The kit handles (and stops) the Esc that closes the list or clears the
-  // text; the one it passes through closes the overlay, one step at a time.
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !e.defaultPrevented && searchCollapse.isOpen()) {
-      e.preventDefault();
-      searchCollapse.close();
-    }
-  });
+  // text; the one it passes through closes the phone drawer (the kit's Esc
+  // stack), one step at a time.
 
   // Bumped on every change, so a ski area's outline that arrives after the
   // reader has moved on is dropped.
@@ -2799,10 +2794,9 @@
     if (!rec) return;
     const animate = !MCO.reducedMotion();
     // Focus stays in the field, unless the field is about to be hidden: the
-    // collapsed overlay hands it to its toggle, the rail drawer to its menu
-    // button, so it never drops to <body>.
-    if (rail.isRail()) rail.close();
-    else if (searchCollapse.isOpen()) searchCollapse.close();
+    // phone drawer hands it back to the button that opened it (the bar's
+    // search button or ☰), so it never drops to <body>.
+    if (inDrawerMode()) rail.close();
 
     if (rec.ski) {
       goToSkiArea(rec, animate);
@@ -2848,10 +2842,9 @@
     if (!kbdShortcuts || e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-    if (document.querySelector('dialog[open]')) return;
+    if (document.querySelector('dialog[open]') || MCO.overlay.isBlocking()) return;
     e.preventDefault();
-    if (rail.isRail()) { rail.open(searchInput); return; }
-    if (searchCollapse.isCollapsed()) { searchCollapse.open(); return; }
+    if (inDrawerMode()) { rail.open(searchInput, { opener: btnSearchToggle }); return; }
     searchInput.focus();
     searchInput.select();
   });

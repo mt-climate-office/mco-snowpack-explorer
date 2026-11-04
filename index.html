@@ -161,12 +161,15 @@
     }
 
     /* Date input and the narrow-screen selects. --ctrl-border for interactive
-       edges, --accent-line for the hover/focus edge (both ≥3:1 — WCAG 1.4.11). */
+       edges, --accent-line for the hover/focus edge (both ≥3:1 — WCAG 1.4.11).
+       --control-h (kit 0.21.0): the bar's one control height, 34px and 40px
+       on touch; `height`, not `min-height`, which WebKit ignores on native
+       form controls (kit MIGRATING.md § Gotchas). */
     input[type="date"], select.nav-select {
       background: none; color: var(--text-primary);
       border: 1px solid var(--ctrl-border); border-radius: var(--radius-md);
       padding: 0 0.55rem; font-size: 0.78rem; font-family: inherit;
-      cursor: pointer; height: 34px; line-height: 34px;
+      cursor: pointer; height: var(--control-h); line-height: var(--control-h);
       -webkit-appearance: none; appearance: none;
       transition: var(--transition);
     }
@@ -178,16 +181,10 @@
     input[type="date"]:hover, select.nav-select:hover { background: var(--accent-hover); border-color: var(--accent-line); }
     input[type="date"]:focus, select.nav-select:focus { border-color: var(--accent-line); background: var(--accent-hover); }
 
-    /* Date stepper: ▲/▼ stacked beside the date input. Previous comes first
-       in the DOM (and the Tab order); column-reverse draws next on top. */
-    .date-stepper { display: flex; align-items: center; gap: 4px; }
-    .date-step-btns { display: flex; flex-direction: column-reverse; gap: 2px; }
-    /* kit-override: the kit's 34px .nav-btn minimum. Two of these stack
-       beside the date input and must fit the one-row bar. */
-    .nav-btn.date-step {
-      padding: 0 4px; min-height: 0; height: 15px; min-width: 20px;
-      border-radius: var(--radius-sm); justify-content: center;
-    }
+    /* Date stepper: the kit's .nav-btn.mco-step pair either side of the date,
+       prev · date · next, in the DOM and the Tab order alike. The buttons
+       are kit-sized (--control-h square, 40px on touch). */
+    .date-stepper { display: flex; align-items: center; gap: 3px; }
 
     /* Narrow-screen fallback for the segmented groups (HOUSE-STYLE §3; the
        photo explorer's pattern). MCO.initSegmentedFallback puts [hidden] on
@@ -200,13 +197,16 @@
     .select-group:has(> select[hidden]) { display: none; }
 
     /* ── Search (kit: .mco-search + MCO.initSearchBox) ─────────────────────
-       Field, icon, listbox and the ≤640px collapse are the kit's. App-owned:
-       the "/" hint, the cancel-glyph filter, and one tagged width. Do NOT add
-       a #btn-search-toggle rule: an ID selector outbids the kit's class and
-       would strand the toggle hidden. */
-    /* kit-override: 190px, not the kit's 220px. With the zonal view's three
-       segmented groups this bar is already short of room above 1060px. */
-    .mco-search .mco-search-input { width: 190px; padding-right: 30px; }
+       Field, icon and listbox are the kit's; below 640px the field lives in
+       the phone bar's drawer. App-owned: the "/" hint, the cancel-glyph
+       filter, and the tagged widths. Do NOT add a #btn-search-toggle rule:
+       an ID selector outbids the kit's class and would strand the toggle
+       hidden. */
+    /* kit-override: 160px, not the kit's 220px, and 130px at the 1400 rung
+       (HOUSE-STYLE §3: "search narrowed"). With the zonal view's three
+       groups and the date stepper this bar is short of room above 1060px. */
+    .mco-search .mco-search-input { width: 160px; padding-right: 30px; }
+    @media (max-width: 1400px) { .mco-search .mco-search-input { width: 130px; } }
     #search-input::-webkit-search-cancel-button { filter: var(--ctrl-icon-filter, none); }
     .search-kbd {
       position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
@@ -310,64 +310,53 @@
        kit's ladder; segmented → select is this app's own 1760 (app.js SEG_MQ),
        where the zonal bar with search stops fitting as buttons. With the zonal view's three groups
        (view, HUC level, normals) the one-row bar needs ~1150px even with the
-       labels shed, so below 1060 the bar may wrap: the controls get their own
-       full-width row and the buttons lift up beside the brand (the photo
-       explorer's pattern). CSS `order` moves the visual position only; tab
-       order is intact. */
+       labels shed, so on a tablet (1060 down to compact) the bar may wrap:
+       the controls get their own full-width row and the buttons lift up
+       beside the brand. CSS `order` moves the visual position only; tab
+       order is intact. On a phone the bar is one row (the compact drawer,
+       below), so the wrap stops at compact: min-height 561px is the rest of
+       MCO.viewport.COMPACT_MQ, since a short window is the landscape rail. */
     /* kit-override: one row above 1060. */
     @media (min-width: 1061px) { .controls { flex-wrap: nowrap; } }
-    @media (max-width: 1060px) {
-      /* kit-override: the wrapped bar's row order. */
+    @media (min-width: 641px) and (max-width: 1060px) and (min-height: 561px) {
+      /* kit-override: the wrapped tablet bar's row order. */
       .nav-meta { order: 1; }
       .controls { order: 2; flex-basis: 100%; flex-wrap: wrap; }
     }
 
-    /* ── Landscape rail (kit .mco-navbar[data-rail] + MCO.initNavRail) ──────
-       The kit owns the rail column, the drawer and the un-hiding of labels
-       inside it. What stays here is this app's own content: the date
-       readout, and how its control groups stack in the drawer. Same query as
-       MCO.viewport.RAIL_MQ. */
-    @media (max-height: 560px) and (orientation: landscape) {
+    /* ── Phone bar and its drawer (kit .mco-navbar[data-rail="compact"] +
+       MCO.initNavRail) ────────────────────────────────────────────────────
+       The kit owns the one-row bar, the landscape rail column, the drawer
+       and the un-hiding of labels inside it. What stays here is this app's
+       own content: the date readout between the bar's stepper buttons, and
+       how its control groups stack in the drawer. The query is
+       MCO.viewport.COMPACT_MQ, the union of the drawer's and the rail's. */
+    @media (max-width: 640px), (max-height: 560px) {
       .rail-readout {
         margin: 0; text-align: center; line-height: 1.25;
         font-size: 0.66rem; font-weight: 500; color: var(--text-secondary);
-        white-space: nowrap;
+        white-space: nowrap; align-self: center;
       }
       .rail-readout span { display: block; }
-      /* kit-override: undo the ≤1060 bar's row ordering — in the drawer's
-         column the controls come first and flex-basis:100% would mean full
-         height. */
-      .mco-nav-drawer .controls { order: 0; flex-basis: auto; gap: 0.75rem; }
+      .mco-nav-drawer .controls { gap: 0.75rem; }
       /* kit-override: the drawer stacks each label over its control. */
       .mco-nav-drawer .control-group { flex-direction: column; align-items: stretch; gap: 0.25rem; }
       .mco-nav-drawer .date-stepper input[type="date"] { flex: 1; min-width: 0; }
-      /* kit-override: the drawer's steppers sit side by side. */
-      .mco-nav-drawer .date-step-btns { flex-direction: row; gap: 4px; }
       .mco-nav-drawer select.nav-select { width: 100%; }
       /* kit-override: the search list stays inside the short viewport. */
       .mco-nav-drawer .mco-search-list { max-height: 50dvh; }
       .mco-nav-drawer .search-kbd { display: none; }
       /* kit-override: the drawer's buttons in a two-column grid. */
       .mco-nav-drawer .nav-meta {
-        order: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
+        display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
       }
     }
 
     /* WCAG 2.5.5 — touch targets for app-owned controls (kit covers its own). */
     @media (hover: none) {
-      /* `height`, not `min-height`: WebKit ignores min-height on native form
-         controls (kit MIGRATING.md § Gotchas). */
-      input[type="date"], select.nav-select { height: 40px; line-height: 40px; }
+      /* The date input and selects take --control-h, 40px here (above). */
       .legend-row { min-height: 32px; }
       .basin-data summary { min-height: 40px; display: flex; align-items: center; }
-      /* Two stacked 15px buttons are untappable — lay the stepper out as a
-         pair of 40px targets (previous left, next right) instead. */
-      .date-step-btns { flex-direction: row; gap: 4px; }
-      /* kit-override: 40px targets in place of the 15px bar steppers. */
-      .nav-btn.date-step {
-        min-width: 40px; min-height: 40px; height: 40px;
-        border-radius: var(--radius-md);
-      }
     }
   </style>
 </head>
@@ -376,35 +365,46 @@
 <!-- WCAG 2.4.1 — first focusable element, jumps past the navbar to the map. -->
 <a class="mco-skip-link" href="#main">Skip to map</a>
 
-<!-- data-rail (kit 0.10.0): on a landscape phone the bar becomes a 56px left
-     rail and .mco-nav-drawer holds the rest (MCO.initNavRail). Outside rail
-     mode the drawer is display:contents and the bar lays out as usual. -->
-<header id="navbar" class="mco-navbar" data-rail>
+<!-- data-rail="compact" (kit 0.21.0): on a phone the bar is one row (the
+     badge · the date stepper · search · ☰) and .mco-nav-drawer opens as a
+     right drawer under it; on a landscape phone the bar becomes a 56px left
+     rail and the drawer opens beside it (MCO.initNavRail). Above compact the
+     drawer is display:contents and the bar lays out as usual. -->
+<header id="navbar" class="mco-navbar" data-rail="compact">
   <a href="https://climate.umt.edu" target="_blank" rel="noopener noreferrer"
      class="logo-link" aria-label="Montana Climate Office">
     <img src="assets/mco-logo.png" alt="" class="logo-img" width="40" height="40">
   </a>
 
-  <!-- Landscape-phone rail (kit .mco-rail). display:none except at
-       MCO.viewport.RAIL_MQ, so it is out of the accessibility tree everywhere
-       else. Menu, then the hot control: next day above previous, like the
-       date stepper, with the date between them. -->
+  <!-- The phone bar's own controls (kit .mco-rail): display:none above
+       compact, so out of the accessibility tree there. ☰ first (the kit
+       moves it to the right edge of the one-row bar), then the hot control,
+       the date stepper laid out prev · date · next, then the search button
+       last, which opens the drawer on the search field. In the landscape
+       rail the same children make the column. -->
   <div class="mco-rail">
     <button type="button" class="nav-btn icon-only" id="btn-rail-menu" aria-label="Map controls"
             aria-controls="nav-drawer" aria-expanded="false">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
-    <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-next" aria-label="Next day">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="18 15 12 9 6 15"/>
-      </svg>
-    </button>
-    <p class="rail-readout" id="rail-readout"></p>
     <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-prev" aria-label="Previous day">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="6 9 12 15 18 9"/>
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <p class="rail-readout" id="rail-readout"></p>
+    <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-next" aria-label="Next day">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </button>
+    <button type="button" class="nav-btn icon-only mco-search-toggle" id="btn-search-toggle"
+            aria-expanded="false" aria-controls="nav-drawer" aria-label="Search places and watersheds">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
     </button>
   </div>
@@ -428,24 +428,23 @@
       <div class="mco-search-list" id="search-list" hidden></div>
     </div>
 
+    <!-- The kit stepper, prev · date · next, every part at --control-h. -->
     <div class="control-group">
       <label class="control-label" for="date-input">Date</label>
       <div class="date-stepper">
+        <button type="button" class="nav-btn icon-only mco-step" id="btn-date-prev" aria-label="Previous day">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
         <input type="date" id="date-input">
-        <div class="date-step-btns">
-          <button type="button" class="nav-btn mco-step date-step" id="btn-date-prev" aria-label="Previous day">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          <button type="button" class="nav-btn mco-step date-step" id="btn-date-next" aria-label="Next day">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="18 15 12 9 6 15"/>
-            </svg>
-          </button>
-        </div>
+        <button type="button" class="nav-btn icon-only mco-step" id="btn-date-next" aria-label="Next day">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -513,27 +512,10 @@
   </div>
 
   <div class="nav-meta">
-    <!-- ≤640px: the search field above collapses; this button is its
-         disclosure, which expands it as an overlay bar under the navbar. Hidden
-         at wider widths, where the field itself is in .controls. -->
-    <button type="button" class="nav-btn icon-only mco-search-toggle" id="btn-search-toggle"
-            aria-expanded="false" aria-controls="search-wrap" aria-label="Search places and watersheds">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-    </button>
-    <!-- A map layer toggle among the bar's buttons, as mesonet-photo-explorer's
-         Boundaries: the kit's .nav-btn[aria-pressed], with an icon and a
-         .btn-label like Share and Export, which the kit sheds to the icon on
-         narrow screens. -->
-    <button type="button" class="nav-btn" id="btn-snotel" aria-pressed="false" aria-label="SNOTEL stations">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-      </svg>
-      <span class="btn-label">SNOTEL</span>
-    </button>
+    <!-- A map layer, so a chip (HOUSE-STYLE §5.7): .mco-chip[aria-pressed],
+         its label always shown. The name starts with the visible word
+         (WCAG 2.5.3). -->
+    <button type="button" class="mco-chip" id="btn-snotel" aria-pressed="false" aria-label="SNOTEL stations">SNOTEL</button>
     <button type="button" class="nav-btn" id="btn-share" aria-label="Copy shareable link">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
