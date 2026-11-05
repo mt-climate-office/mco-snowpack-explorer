@@ -19,7 +19,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 cd "$work"
 
-gdal_translate -q "/vsicurl/https://data2.climate.umt.edu/snodas/cogs/$DATE/snodas_swe_${DATE//-/}.tif" swe.tif
+gdal_translate -q "/vsicurl/https://data2.climate.umt.edu/snodas/raw/cog/$DATE/snodas_swe_$DATE.tif" swe.tif
 gdal_calc --quiet -A swe.tif --outfile=mask.tif --calc="A>=0" --type=Byte --NoDataValue=0 --overwrite
 gdal_polygonize -q mask.tif -f GeoJSON cells.geojson cells
 ogr2ogr -f GeoJSON -dialect sqlite \
