@@ -29,11 +29,10 @@
   'use strict';
 
   // ── Constants ────────────────────────────────────────────────────────────
-  // The first date with published percentiles: the normals pipeline
-  // (mco-snodas) starts at snow year 2026, so nothing before 2025-09-01 has
-  // a percentile file even though SNODAS itself begins in 2003. Move this
-  // back if older years are ever backfilled.
-  const SNODAS_START = '2025-09-01';
+  // The first date with published plots and percentiles: mco-snodas
+  // publishes from water year 2026 (2025-10-01) on, even though SNODAS itself
+  // begins in 2003. Move this back if older years are ever backfilled.
+  const SNODAS_START = '2025-10-01';
   const DATA_HOST  = 'https://data2.climate.umt.edu';
   // Backup: data2's CloudFront default domain serves the same paths. Swap it in
   // if data2's certificate lapses again (the CSP already allows both).

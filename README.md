@@ -81,8 +81,8 @@ For WY2027 that is `wy2004-2026`. `{day}` is the date's `MM-DD`.
 | A date's plots are complete | `daily/plots/{period}/{date}/index_{period}_{date}.json` |
 | Which dates have plots | listing of `daily/plots/{period}/` |
 
-Percentiles start on 2025-09-01, the first day of the first snow year the
-normals pipeline has built. Plots are not published for every date yet; the
+Percentiles and plots start on 2025-10-01, the first day of water year 2026,
+the first the normals pipeline publishes. Plots are not published for every date yet; the
 page says so and offers the nearest date that has them.
 
 ## URL parameters
