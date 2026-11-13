@@ -227,8 +227,11 @@
 
     /* ── Legend (kit .mco-panel; app-owned position and rows) ─────────────── */
     #legend { bottom: max(36px, calc(12px + env(safe-area-inset-bottom))); left: 12px; min-width: 150px; }
-    /* A portrait phone wraps MapLibre's attribution to two lines; clear it. */
-    @media (max-width: 640px) { #legend { bottom: max(64px, calc(12px + env(safe-area-inset-bottom))); } }
+    /* A phone wraps MapLibre's attribution to two lines; clear it. On a
+       phone the panel itself is in the ☰ drawer (kit 1.0.0), and this places
+       the Legend button the kit puts at the panel's corner. The compact query
+       (MCO.viewport.COMPACT_MQ), so a landscape phone's button clears it too. */
+    @media (max-width: 640px), (max-height: 560px) { #legend { bottom: max(64px, calc(12px + env(safe-area-inset-bottom))); } }
     .legend-sub { font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 2px; }
     #legend-meta {
       font-family: var(--font-mono);
@@ -266,6 +269,13 @@
        wider here than the kit's 360px because the plots are 3:2 and their
        axis labels are small. */
     #detail-sheet { --sheet-w: 560px; }
+    /* kit-override: kit 1.0.0 stops the compact panel at the bottom control
+       bar (--tabbar-h) but docks the panel above compact at bottom: 0, and
+       this app's bar folds, with its control bar, up to about 1060px: at
+       768×1024 the panel's last 58px sat under the control bar. --tabbar-h
+       is 0 wherever the control bar is hidden, so this changes nothing else.
+       Reported for the kit; drop it when the kit does the same. */
+    #detail-sheet { bottom: var(--tabbar-h, 0px); }
     .detail-subtitle { margin: 0 0 0.75rem; font-size: 0.8rem; color: var(--text-secondary); }
     .basin-controls {
       display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.25rem;
@@ -317,72 +327,31 @@
     /* ── Responsive ────────────────────────────────────────────────────────── */
     /* Breakpoints 1400 (labels) / 1060 (chrome) / 750 (brand lockup) are the
        kit's ladder; segmented → select is this app's own 1760 (app.js SEG_MQ),
-       where the zonal bar with search stops fitting as buttons. With the zonal view's three groups
-       (view, HUC level, normals) the one-row bar needs ~1150px even with the
-       labels shed, so on a tablet (1060 down to compact) the bar may wrap:
-       the controls get their own full-width row and the buttons lift up
-       beside the brand. CSS `order` moves the visual position only; tab
-       order is intact. On a phone the bar is one row (the compact drawer,
-       below), so the wrap stops at compact: min-height 561px is the rest of
-       MCO.viewport.COMPACT_MQ, since a short window is the landscape rail. */
-    /* kit-override: one row above 1060. */
-    @media (min-width: 1061px) { .controls { flex-wrap: nowrap; } }
-    /* Since kit 0.21.1 the wrapped bar folds (.is-folded, fold-to-fit: the kit
-       measures it unfolded, so these rules still make it wrap and fold).
-       Folded, .nav-meta and .controls sit in the ☰ drawer, which keeps the
-       phone drawer's order, so the row order is the unfolded bar's only. */
-    @media (min-width: 641px) and (max-width: 1060px) and (min-height: 561px) {
-      /* kit-override: the wrapped tablet bar's row order. */
-      .mco-navbar:not(.is-folded) .nav-meta { order: 1; }
-      .mco-navbar:not(.is-folded) .controls { order: 2; flex-basis: 100%; flex-wrap: wrap; }
-    }
+       where the zonal bar with search stops fitting as buttons. Where the
+       full bar won't fit in one row (the zonal view's three groups below
+       about 1060px, any view below about 1000px), the kit folds it (kit
+       0.21.1 fold-to-fit): the phone bar, its ☰ drawer, and the date stepper
+       in the bottom control bar (kit 1.0.0). */
 
     /* ── Phone bar and its drawer (kit .mco-navbar[data-rail="compact"] +
        MCO.initNavRail) ────────────────────────────────────────────────────
-       The kit owns the one-row bar, the landscape rail column, the drawer
-       and the un-hiding of labels inside it. What stays here is this app's
-       own content: the date readout between the bar's stepper buttons, and
-       how its control groups stack in the drawer.
-       The readout needs no query: it lives in .mco-rail, which the kit shows
-       only as the landscape rail or the folded bar, at any width, and it is
-       stacked (month and day · year) wherever it shows.
-       The drawer rules are keyed twice: on MCO.viewport.COMPACT_MQ (the union
-       of the drawer's and the rail's), and on .is-folded, because since kit
-       0.21.1 the bar also folds ABOVE 640px wherever it would wrap (here
-       641–1060px, by the rules above). KEEP THE TWO IN SYNC. */
-    .rail-readout {
-      margin: 0; text-align: center; line-height: 1.25;
-      font-size: 0.66rem; font-weight: 500; color: var(--text-secondary);
-      white-space: nowrap; align-self: center;
-    }
-    .rail-readout span { display: block; }
-    @media (max-width: 640px), (max-height: 560px) {
-      /* kit-override: more air between the drawer's control groups. */
-      .mco-nav-drawer .controls { gap: 0.75rem; }
-      /* kit-override: the drawer stacks each label over its control. */
-      .mco-nav-drawer .control-group { flex-direction: column; align-items: stretch; gap: 0.25rem; }
-      .mco-nav-drawer .date-stepper input[type="date"] { flex: 1; min-width: 0; }
-      .mco-nav-drawer select.nav-select { width: 100%; }
-      /* kit-override: the search list stays inside the short viewport. */
-      .mco-nav-drawer .mco-search-list { max-height: 50dvh; }
-      .mco-nav-drawer .search-kbd { display: none; }
-      /* kit-override: the drawer's buttons in a two-column grid. */
-      .mco-nav-drawer .nav-meta {
-        display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
-      }
-    }
-    /* The same drawer, folded above 640px (kit 0.21.1 fold-to-fit). */
-    /* kit-override: as above, more air between the drawer's control groups. */
-    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .controls { gap: 0.75rem; }
-    /* kit-override: as above, each label over its control. */
-    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .control-group { flex-direction: column; align-items: stretch; gap: 0.25rem; }
-    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .date-stepper input[type="date"] { flex: 1; min-width: 0; }
-    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer select.nav-select { width: 100%; }
-    /* kit-override: as above, the search list stays inside the viewport. */
-    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .mco-search-list { max-height: 50dvh; }
-    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .search-kbd { display: none; }
-    /* kit-override: as above, the drawer's buttons in a two-column grid. */
-    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .nav-meta {
+       The kit owns the one-row bar, the landscape rail at the right edge,
+       the drawer, the un-hiding of labels inside it, the bottom control bar
+       and its date readout. What stays here is how this app's control
+       groups stack in the drawer. The drawer is the folded bar's
+       (.is-folded: every portrait phone, and any width where the bar would
+       wrap) or the landscape rail's (html.is-rail, kit 1.0.0): one set of
+       rules for both. */
+    /* kit-override: more air between the drawer's control groups. */
+    :is(.mco-navbar[data-rail="compact"].is-folded, html.is-rail .mco-navbar) .mco-nav-drawer .controls { gap: 0.75rem; }
+    /* kit-override: the drawer stacks each label over its control. */
+    :is(.mco-navbar[data-rail="compact"].is-folded, html.is-rail .mco-navbar) .mco-nav-drawer .control-group { flex-direction: column; align-items: stretch; gap: 0.25rem; }
+    :is(.mco-navbar[data-rail="compact"].is-folded, html.is-rail .mco-navbar) .mco-nav-drawer .date-stepper input[type="date"] { flex: 1; min-width: 0; }
+    :is(.mco-navbar[data-rail="compact"].is-folded, html.is-rail .mco-navbar) .mco-nav-drawer select.nav-select { width: 100%; }
+    /* kit-override: the "/" hint is for a keyboard, not the drawer. */
+    :is(.mco-navbar[data-rail="compact"].is-folded, html.is-rail .mco-navbar) .mco-nav-drawer .search-kbd { display: none; }
+    /* kit-override: the drawer's buttons in a two-column grid. */
+    :is(.mco-navbar[data-rail="compact"].is-folded, html.is-rail .mco-navbar) .mco-nav-drawer .nav-meta {
       display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
     }
 
@@ -399,11 +368,12 @@
 <!-- WCAG 2.4.1 — first focusable element, jumps past the navbar to the map. -->
 <a class="mco-skip-link" href="#main">Skip to map</a>
 
-<!-- data-rail="compact" (kit 0.21.0): on a phone the bar is one row (the
-     badge · the date stepper · search · ☰) and .mco-nav-drawer opens as a
-     right drawer under it; on a landscape phone the bar becomes a 56px left
-     rail and the drawer opens beside it (MCO.initNavRail). Above compact the
-     drawer is display:contents and the bar lays out as usual. -->
+<!-- data-rail="compact" (kit 0.21.0; 1.0.0): on a phone the bar is one row
+     (the badge · search · ☰) and .mco-nav-drawer opens as a right drawer
+     under it; on a landscape phone the bar becomes a 56px rail at the right
+     edge and the drawer opens beside it (MCO.initNavRail). The date stepper
+     is in the bottom control bar there. Above compact the drawer is
+     display:contents and the bar lays out as usual. -->
 <header id="navbar" class="mco-navbar" data-rail="compact">
   <a href="https://climate.umt.edu" target="_blank" rel="noopener noreferrer"
      class="logo-link" aria-label="Montana Climate Office">
@@ -412,27 +382,14 @@
 
   <!-- The phone bar's own controls (kit .mco-rail): display:none above
        compact, so out of the accessibility tree there. ☰ first (the kit
-       moves it to the right edge of the one-row bar), then the hot control,
-       the date stepper laid out prev · date · next, then the search button
-       last, which opens the drawer on the search field. In the landscape
-       rail the same children make the column. -->
+       moves it to the right edge of the one-row bar), then the search
+       button, which opens the drawer on the search field. In the landscape
+       rail (at the right edge, kit 1.0.0) the same children make the column.
+       The date stepper is in the bottom control bar, after the header. -->
   <div class="mco-rail">
     <button type="button" class="nav-btn icon-only" id="btn-rail-menu" aria-label="Map controls"
             aria-controls="nav-drawer" aria-expanded="false">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-    </button>
-    <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-prev" aria-label="Previous day">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="15 18 9 12 15 6"/>
-      </svg>
-    </button>
-    <p class="rail-readout" id="rail-readout"></p>
-    <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-next" aria-label="Next day">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="9 18 15 12 9 6"/>
-      </svg>
     </button>
     <button type="button" class="nav-btn icon-only mco-search-toggle" id="btn-search-toggle"
             aria-expanded="false" aria-controls="nav-drawer" aria-label="Search places and watersheds">
@@ -595,6 +552,27 @@
   </div>
 </header>
 
+<!-- The time controls on a phone (kit .mco-controlbar, 1.0.0): docked at
+     the bottom wherever the bar is folded, at the foot of the right rail in
+     short landscape, and hidden above that (the full bar has the date
+     stepper) and under an on-screen keyboard. Core wires it at load. The
+     readout is the date at a glance, written by app.js (updateRail). -->
+<div class="mco-controlbar" role="group" aria-label="Date">
+  <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-prev" aria-label="Previous day">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  </button>
+  <p class="mco-controlbar-readout" id="rail-readout"></p>
+  <button type="button" class="nav-btn icon-only mco-step" id="btn-rail-next" aria-label="Next day">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke-width="3"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
+  </button>
+</div>
+
 <!-- Rail mode only: dims the map while the drawer is open; a tap closes it. -->
 <div class="mco-scrim" id="rail-scrim" hidden></div>
 
@@ -603,8 +581,11 @@
        after the map. -->
   <div id="map" role="application" aria-label="SWE percentile map"></div>
 
-  <!-- data-autolift (kit 0.13.0, with html.mco-autolift): on compact the
-       legend rides up with the bottom sheet instead of sitting under it. -->
+  <!-- data-autolift (kit 0.13.0, with html.mco-autolift): the legend
+       clears the attribution. On compact (kit 1.0.0, MCO.initLegendDrawer in
+       app.js) the panel moves into a "Legend" group in the ☰ drawer, and a
+       Legend button, carrying this attribute, takes its corner on the map
+       above the bottom control bar. -->
   <aside id="legend" class="mco-panel" aria-labelledby="legend-title" data-autolift>
     <div class="mco-panel-head">
       <h2 id="legend-title" class="mco-panel-title">SWE percentile</h2>
@@ -636,24 +617,23 @@
      click-to-pin reading writes to, and the table twin. -->
 <div id="tooltip" class="mco-tooltip" aria-hidden="true"></div>
 
-<!-- The detail panel (kit MCO.initSheet, 0.21.0): docked at the right edge
-     above compact, a bottom sheet with peek and full detents on compact.
+<!-- The detail panel (kit MCO.initSheet, 0.21.0; one state from 1.0.0):
+     docked at the right edge above compact, and on compact full height under
+     the bar, with the bar and the date control bar still live.
      It shows one thing at a time, a SNOTEL station (click a station, or
      Enter on its row in the table twin) or a watershed (click one in the
-     zonal view, or Enter on its row), and is not modal: the map stays
-     usable beside it. Date and normals are the page's own state, so
+     zonal view, or Enter on its row). Above compact it is not modal: the
+     map stays usable beside it. Date and normals are the page's own state, so
      changing them here moves the map too; the plot type and the animation
      are the watershed's. Opening pushes a history entry, so Back closes it.
      The title is filled at open time; the panel is named by it. -->
 <section class="mco-sheet" id="detail-sheet" aria-labelledby="detail-title" data-state="closed" hidden>
   <div class="mco-sheet-head">
-    <button type="button" class="mco-sheet-grip" aria-label="Expand details" aria-expanded="false"></button>
     <h2 class="mco-sheet-title" id="detail-title" tabindex="-1">Details</h2>
-    <button type="button" class="modal-close" data-close-sheet aria-label="Close">&times;</button>
+    <button type="button" class="modal-close" data-close-sheet aria-label="Close details">&times;</button>
   </div>
   <div class="mco-sheet-body">
-    <!-- What the sheet shows at its peek detent: the title and this line. -->
-    <p class="detail-subtitle" id="detail-subtitle" data-peek></p>
+    <p class="detail-subtitle" id="detail-subtitle"></p>
 
     <div class="basin-controls">
       <div class="control-group">
@@ -818,14 +798,15 @@
 
     <div class="info-section">
       <h3>How to use it</h3>
-      <p>The map opens on Montana. On a phone, the day stepper and search stay in the bar at the top,
-         and the other controls are under <strong>☰</strong>.</p>
+      <p>The map opens on Montana. On a phone, search stays in the bar at the top, the day stepper
+         sits in a bar along the bottom (at the right edge when the phone is sideways), and the other
+         controls and the legend are under <strong>☰</strong>.</p>
       <ul>
         <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><strong>Search</strong>. Type a state, county, watershed, city, ski area or ZIP code
             to go there. Press <kbd>/</kbd> to jump to the search box (add <code>?kbd=off</code> to the address to turn
-            that key off). A city or ZIP code is marked with a dot, and a watershed is outlined, as is a ski area
+            that key and the arrow keys off). A city or ZIP code is marked with a dot, and a watershed is outlined, as is a ski area
             where OpenStreetMap maps its boundary.</li>
-        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></span><strong>Date</strong>. Pick a day, or step one day at a time with ‹ and ›.</li>
+        <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></span><strong>Date</strong>. Pick a day, or step one day at a time with ‹ and › or the <kbd>←</kbd> and <kbd>→</kbd> keys. If you reach the map with <kbd>Tab</kbd>, the arrow keys pan it instead; after a click, ← and → change the day and ↑ and ↓ pan.</li>
         <li><strong>View</strong>. Gridded shows every 1&thinsp;km cell. Zonal averages over watersheds, from
             the smallest (HUC8 subbasins, the default) to the largest (HUC2 regions); choose the size with Level.</li>
         <li><strong>Normals</strong>. The past years each day is measured against. Smoothed is the default;
@@ -848,8 +829,8 @@
         <li><span class="info-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span><strong>Theme</strong>. Switches between dark, light and high contrast.</li>
       </ul>
       <h4>Station and watershed plots</h4>
-      <p>A station's or a watershed's plots open in a panel beside the map, or at the bottom of the
-         screen on a phone, where you drag it up or tap its handle to see the whole plot. The date and
+      <p>A station's or a watershed's plots open in a panel beside the map, or in place of the map on
+         a phone, under the bar. The date and
          normals in the panel are the map's own: change them there and the map changes too.
          <kbd>Esc</kbd>, the close button or the browser's Back button closes it.</p>
       <ul>

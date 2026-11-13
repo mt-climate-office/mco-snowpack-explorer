@@ -326,8 +326,9 @@
     document.querySelector('meta[name="description"]')?.setAttribute('content', desc);
   }
 
-  // The date at a glance in the folded bar and the landscape rail, where the
-  // drawer is usually closed. Spans built with textContent, with real
+  // The date at a glance in the bottom control bar and at the foot of the
+  // landscape rail (kit .mco-controlbar-readout), where the drawer is
+  // usually closed. Spans built with textContent, with real
   // separators so it reads "Nov 12, 2026" stacked or not: the comma shows,
   // and the space between the spans collapses when they stack but keeps the
   // words apart otherwise and for a screen reader.
@@ -928,14 +929,22 @@
 
   // Date steppers — the kit's: a step on click (keyboard included), a repeat
   // while a pointer is held, and a button disabled at its bound. The navbar's
-  // pair and the landscape rail's pair drive the same date. The new date is
-  // announced, since the change is otherwise visible only on the map.
+  // pair and the control bar's pair (and the detail panel's, below) drive
+  // the same date. The new date is announced, since the change is otherwise
+  // visible only on the map. ← / → step it too (kit 1.0.0 arrowKeys, every
+  // date stepper in the family): the kit takes the keys for whichever of
+  // these is showing, leaves fields, radio groups reached by keyboard,
+  // dialogs and a map reached with Tab their own arrows, sets
+  // aria-keyshortcuts on the buttons, and stands down under ?kbd=off. The
+  // animation's frame stepper is not one of them: its own handler, in the
+  // panel, takes ← / → first.
   const stepperOpts = {
     onStep: (d) => {
       setDate(MCO.shiftDate(currentDate, d))
         .then(() => MCO.announce(`Showing ${MCO.formatDateStr(currentDate)}`));
     },
     canStep: (d) => (d < 0 ? currentDate > SNODAS_START : currentDate < latestDate),
+    arrowKeys: true, unit: 'day',
   };
   const steppers = [
     MCO.initStepper({ prev: document.getElementById('btn-date-prev'), next: document.getElementById('btn-date-next'), ...stepperOpts }),
@@ -1350,8 +1359,9 @@
   // ── Detail panel ──────────────────────────────────────────────────────────
   // A station's or a watershed's plots, in the kit's sheet (MCO.initSheet,
   // HOUSE-STYLE §3: station detail at every width): docked at the right edge
-  // above compact, where the map stays usable beside it, and a bottom sheet
-  // with peek and full detents on compact. One panel, one detail at a time:
+  // above compact, where the map stays usable beside it, and full height
+  // under the bar on compact (kit 1.0.0: one state, the bar and the control
+  // bar live). One panel, one detail at a time:
   // opening a station closes the watershed it showed, and the reverse. Its
   // date and normals controls are the page's own (setDate / setFlavor update
   // every control bound to them, so the panel and the map can't drift
@@ -1395,9 +1405,10 @@
     stationPanel.hidden = kind !== 'station';
     return wasOpen;
   }
-  function openSheet(wasOpen) { sheet.open(wasOpen ? sheet.state() : 'peek'); }
+  // Already open, it keeps its place and focuses the new title.
+  const openSheet = () => sheet.open();
 
-  // Close (×, Esc, a drag below peek, or Back) has one path. If the panel
+  // Close (×, Esc or Back) has one path. If the panel
   // pushed its entry, step Back over it, so the close button and the
   // browser's Back land on the same entry and Forward reopens it; when Back
   // itself closed it, the URL is already right. The kit returns focus to
@@ -1687,7 +1698,7 @@
     setSearchHit(null);   // the basin's own outline takes over
     refreshTwinSelection();
     writeUrl(push && !wasOpen ? { push: true, state: { mcoDetail: huc } } : {});
-    openSheet(wasOpen);
+    openSheet();
     renderBasin();
   }
 
@@ -2157,10 +2168,11 @@
     });
   }
 
-  // ── Phone bar (kit 0.21.0 compact drawer; 0.10.0 rail) ────────────────────
-  // On a phone the bar is one row (badge · date stepper · search · ☰) and ☰
-  // opens .mco-nav-drawer, holding the rest, as a right drawer under it; on a
-  // landscape phone the bar is the left rail and the drawer opens beside it.
+  // ── Phone bar (kit 0.21.0 compact drawer; 0.10.0 rail, right edge 1.0.0) ─
+  // On a phone the bar is one row (badge · search · ☰) and ☰ opens
+  // .mco-nav-drawer, holding the rest, as a right drawer under it; on a
+  // landscape phone the bar is the rail at the right edge and the drawer
+  // opens beside it. The date stepper is the bottom control bar's (index.html).
   // Both on the drawer contract: focus in, page inert, Esc / scrim back to
   // the button that opened it. The bar's search button opens the drawer on
   // the search field, which lives there. Export closes the drawer first,
@@ -2174,6 +2186,12 @@
     search: { toggle: document.getElementById('btn-search-toggle'), input: document.getElementById('search-input') },
   });
   const inDrawerMode = () => rail.isRail() || rail.isDrawerMode();
+  // The legend on a phone (kit 1.0.0, Kyle 2026-11-12): at 549px it is
+  // taller than a 320×568 screen, so on compact the kit moves the panel into
+  // a "Legend" group at the end of the ☰ drawer and puts a Legend button in
+  // its corner of the map that opens the drawer there. Above compact it
+  // floats as before.
+  MCO.initLegendDrawer({ panel: document.getElementById('legend'), rail });
   document.getElementById('btn-export').addEventListener('click', () => {
     rail.close({ restoreFocus: false });
     exportMap();
@@ -2532,7 +2550,7 @@
       setSelectedStation(id);
       renderStationTwin();
       writeUrl(push && !wasOpen ? { push: true, state: { mcoDetail: `station:${id}` } } : {});
-      openSheet(wasOpen);
+      openSheet();
       renderStation();
     };
     if (!fly) { show(); return; }
@@ -2960,7 +2978,12 @@
     provenanceCtl.open();
   }
 
+  // On a phone the legend is in the ☰ drawer (kit 1.0.0), where everything
+  // outside the drawer, this dialog included, is inert: close the drawer
+  // first, as the info button does. Focus goes back to whatever opened it
+  // (☰ or the Legend button), and the dialog returns it there.
   document.getElementById('legend-info-btn').addEventListener('click', () => {
+    if (rail.isOpen()) rail.close();
     fetchProvenance(currentDate).then(showProvenance);
   });
 
