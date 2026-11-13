@@ -42,11 +42,11 @@
   <!-- Favicons / app icons, hot-linked from the pinned kit tag (kit 0.9.0,
        decided 2026-10-08) so they version with the kit and can't drift. The
        navbar logo stays vendored in assets/. -->
-  <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/assets/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/assets/favicon-16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/assets/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/assets/icon-192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/assets/icon-512.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/assets/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/assets/icon-512.png">
 
   <!-- Open Graph / Twitter. The card image is the kit's og-card.png from the
        pinned tag (the vendored copy was never referenced). -->
@@ -55,17 +55,17 @@
   <meta property="og:title"       content="Snowpack · Montana Climate Office">
   <meta property="og:description" content="Daily snowpack percentiles for the lower 48 states and their watersheds, from NOAA SNODAS. A service of the Montana Climate Office.">
   <meta property="og:url"         content="https://snow.climate.umt.edu/">
-  <meta property="og:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/assets/og-card.png">
+  <meta property="og:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/assets/og-card.png">
   <meta property="og:image:width"  content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt"   content="Montana Climate Office">
   <meta name="twitter:card"        content="summary_large_image">
   <meta name="twitter:title"       content="Snowpack · Montana Climate Office">
   <meta name="twitter:description" content="Daily snowpack percentiles for the lower 48 states and their watersheds, from NOAA SNODAS. A service of the Montana Climate Office.">
-  <meta name="twitter:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/assets/og-card.png">
+  <meta name="twitter:image"       content="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/assets/og-card.png">
   <meta name="twitter:image:alt"   content="Montana Climate Office">
 
-  <!-- mco-web-style · anti-flash theme boot (snippets/anti-flash.html @0.21.0,
+  <!-- mco-web-style · anti-flash theme boot (snippets/anti-flash.html @1.0.0,
        unchanged since 0.19.0; copied byte for byte). Kept INLINE and ahead of
        every stylesheet on purpose: from a CDN it would land after first paint
        and reintroduce the flash it exists to prevent. Precedence: ?theme= →
@@ -103,8 +103,8 @@
   <!-- House fonts: kit-hosted, declared in mco-theme.css. Preloaded so the
        first frame is already in Outfit — no system-font flash. Same @version
        as the theme CSS; crossorigin is required on font preloads. -->
-  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/fonts/space-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/fonts/outfit-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/fonts/space-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
 
   <!-- MapLibre GL 6.11.2 (kit 0.8.0+; 5.18.0 carried the critical
        attribution-control XSS GHSA-jrc7-96c5-q579). 6.x is ES-modules only:
@@ -123,11 +123,11 @@
       integrity="sha384-ntw3zEt6rcVML7jDK0ULmHa5hxLB23afsPqzqfY+gLgMfAkbFCnCgPpkZvV5mmZX"
       crossorigin="anonymous">
 
-  <!-- mco-web-style @0.21.2 — tokens, reset, a11y utilities, navbar/panel/toast/
+  <!-- mco-web-style @1.0.0 — tokens, reset, a11y utilities, navbar/panel/toast/
        tooltip/modal shells, MapLibre control polish, and the high-contrast
        theme this page had no values for. -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/theme/mco-theme.css"
-        integrity="sha384-6b+8YTXHtiLQOLwPSXvqmgnA4QlUZ87oGCr9kwLwAHCTV+oDPCkM0IK6mve/4BeY"
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/theme/mco-theme.css"
+        integrity="sha384-HjjLXx7sl8kCo5AGlJntIezB6zBy0d6tLrCo3ies6XMRNsnZTcXPMGRHbPXULsbR"
         crossorigin="anonymous">
 
   <style>
@@ -920,17 +920,17 @@
 <script src="https://cdn.jsdelivr.net/npm/flatgeobuf@3.38.0/dist/flatgeobuf-geojson.min.js"
         integrity="sha384-qaUb9sZ45HYxNQezOWPyOMTRR7yph9xtoAW8TyJGHen5BcUmaBIcDil9Yj48HGav"
         crossorigin="anonymous"></script>
-<!-- mco-web-style @0.21.2 (window.MCO / MCO.map). cog-protocol.js is the
+<!-- mco-web-style @1.0.0 (window.MCO / MCO.map). cog-protocol.js is the
      KIT's copy. SRI hashes are snippets/head.html's for this exact tag. No
      mco-palette.js: this app's data ramp is the USDM category scale,
      app-owned, and it draws no station markers. -->
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/core/mco-core.js"
-        integrity="sha384-xNdr9/kMYOXBLa6aHuU637Nln0S73l6QjvB9Ld7vqCvwcqZ6wzs69YziKejo8M3w"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/core/mco-core.js"
+        integrity="sha384-t800UcLEEofHivAXfxn2DO9KKpqnAhdsEBZWCPzfYZxq1C4VEPiyjgQ4fDrNZtOq"
         crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/map/mco-map.js"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/map/mco-map.js"
         integrity="sha384-8ZLN6Xhnts1kIMbDa9M+H05sYgu770WLohBOrch1nTafMd+HEM7PlrP0e4fCoRb8"
         crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@0.21.2/map/cog-protocol.js"
+<script src="https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/map/cog-protocol.js"
         integrity="sha384-9yj+drZu0fzoorpjvVuopXW7He6R73EklvzwXBRNgQIvCIunOVzdJXi0oVhvM2BW"
         crossorigin="anonymous"></script>
 
