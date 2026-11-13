@@ -326,13 +326,17 @@
     document.querySelector('meta[name="description"]')?.setAttribute('content', desc);
   }
 
-  // The date at a glance in the landscape rail, where the drawer is usually
-  // closed. Spans built with textContent.
+  // The date at a glance in the folded bar and the landscape rail, where the
+  // drawer is usually closed. Spans built with textContent, with real
+  // separators so it reads "Nov 12, 2026" stacked or not: the comma shows,
+  // and the space between the spans collapses when they stack but keeps the
+  // words apart otherwise and for a screen reader.
   const railReadout = document.getElementById('rail-readout');
   function updateRail() {
     const d = new Date(`${currentDate}T12:00:00`);
     const md = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    railReadout.replaceChildren(...[md, String(d.getFullYear())].map(t => h('span', { textContent: t })));
+    railReadout.replaceChildren(
+      h('span', { textContent: `${md},` }), ' ', h('span', { textContent: String(d.getFullYear()) }));
   }
 
   // ── Announcements ─────────────────────────────────────────────────────────
