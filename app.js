@@ -483,7 +483,7 @@
     canvasContextAttributes: { preserveDrawingBuffer: true }, // required for PNG export (MapLibre ≥ 5 option; unchanged in 6)
   });
 
-  // House navigation: zoom buttons, top-right, no compass — rotation isn't a
+  // House navigation: zoom buttons, top-left (kit 1.0.0), no compass — rotation isn't a
   // feature here — with the full-extent button fused into the same group, and
   // the zoom floor that keeps the lower 48 filling the viewport.
   //
