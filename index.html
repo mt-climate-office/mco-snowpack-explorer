@@ -327,10 +327,14 @@
        MCO.viewport.COMPACT_MQ, since a short window is the landscape rail. */
     /* kit-override: one row above 1060. */
     @media (min-width: 1061px) { .controls { flex-wrap: nowrap; } }
+    /* Since kit 0.21.1 the wrapped bar folds (.is-folded, fold-to-fit: the kit
+       measures it unfolded, so these rules still make it wrap and fold).
+       Folded, .nav-meta and .controls sit in the ☰ drawer, which keeps the
+       phone drawer's order, so the row order is the unfolded bar's only. */
     @media (min-width: 641px) and (max-width: 1060px) and (min-height: 561px) {
       /* kit-override: the wrapped tablet bar's row order. */
-      .nav-meta { order: 1; }
-      .controls { order: 2; flex-basis: 100%; flex-wrap: wrap; }
+      .mco-navbar:not(.is-folded) .nav-meta { order: 1; }
+      .mco-navbar:not(.is-folded) .controls { order: 2; flex-basis: 100%; flex-wrap: wrap; }
     }
 
     /* ── Phone bar and its drawer (kit .mco-navbar[data-rail="compact"] +
@@ -338,15 +342,21 @@
        The kit owns the one-row bar, the landscape rail column, the drawer
        and the un-hiding of labels inside it. What stays here is this app's
        own content: the date readout between the bar's stepper buttons, and
-       how its control groups stack in the drawer. The query is
-       MCO.viewport.COMPACT_MQ, the union of the drawer's and the rail's. */
+       how its control groups stack in the drawer.
+       The readout needs no query: it lives in .mco-rail, which the kit shows
+       only as the landscape rail or the folded bar, at any width, and it is
+       stacked (month and day · year) wherever it shows.
+       The drawer rules are keyed twice: on MCO.viewport.COMPACT_MQ (the union
+       of the drawer's and the rail's), and on .is-folded, because since kit
+       0.21.1 the bar also folds ABOVE 640px wherever it would wrap (here
+       641–1060px, by the rules above). KEEP THE TWO IN SYNC. */
+    .rail-readout {
+      margin: 0; text-align: center; line-height: 1.25;
+      font-size: 0.66rem; font-weight: 500; color: var(--text-secondary);
+      white-space: nowrap; align-self: center;
+    }
+    .rail-readout span { display: block; }
     @media (max-width: 640px), (max-height: 560px) {
-      .rail-readout {
-        margin: 0; text-align: center; line-height: 1.25;
-        font-size: 0.66rem; font-weight: 500; color: var(--text-secondary);
-        white-space: nowrap; align-self: center;
-      }
-      .rail-readout span { display: block; }
       /* kit-override: more air between the drawer's control groups. */
       .mco-nav-drawer .controls { gap: 0.75rem; }
       /* kit-override: the drawer stacks each label over its control. */
@@ -360,6 +370,20 @@
       .mco-nav-drawer .nav-meta {
         display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
       }
+    }
+    /* The same drawer, folded above 640px (kit 0.21.1 fold-to-fit). */
+    /* kit-override: as above, more air between the drawer's control groups. */
+    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .controls { gap: 0.75rem; }
+    /* kit-override: as above, each label over its control. */
+    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .control-group { flex-direction: column; align-items: stretch; gap: 0.25rem; }
+    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .date-stepper input[type="date"] { flex: 1; min-width: 0; }
+    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer select.nav-select { width: 100%; }
+    /* kit-override: as above, the search list stays inside the viewport. */
+    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .mco-search-list { max-height: 50dvh; }
+    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .search-kbd { display: none; }
+    /* kit-override: as above, the drawer's buttons in a two-column grid. */
+    .mco-navbar[data-rail="compact"].is-folded .mco-nav-drawer .nav-meta {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
     }
 
     /* WCAG 2.5.5 — touch targets for app-owned controls (kit covers its own). */
