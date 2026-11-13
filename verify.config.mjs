@@ -126,17 +126,44 @@ export default {
       check('stepper: ?date= re-emitted', /date=2026-02-15/.test(await search(page)));
       await close();
     }
-    // Landscape phone: the nav rail's drawer (kit 0.10.0) — focus in, page inert, Esc back to Menu.
-    {
-      const { page, close } = await open('?date=2026-02-15&view=zonal&huc=4',
-        { viewport: { name: '750x342', width: 750, height: 342, touch: true }, ready: painted, timeout: 45000 });
+    // Landscape phones (kit 1.0.0): the bar is a 56px rail at the RIGHT
+    // edge, top to bottom the badge, ☰, search, then the control bar's date
+    // stepper at its foot, every button ≥ 44px on touch and hittable, the
+    // readout one date ("Feb 15, 2026"). ☰ opens the drawer beside the rail
+    // (left of it) with focus on the drawer, #main inert and the control bar
+    // live; Esc closes it back to ☰.
+    for (const vp of [{ name: '844x390', width: 844, height: 390, touch: true }, { name: '750x342', width: 750, height: 342, touch: true }]) {
+      const { page, close } = await open('?date=2026-02-15&view=zonal&huc=4', { viewport: vp, ready: painted, timeout: 45000 });
+      const g = await page.evaluate(() => {
+        const R = (el) => el.getBoundingClientRect();
+        const nav = R(document.getElementById('navbar'));
+        const btns = ['btn-rail-menu', 'btn-search-toggle', 'btn-rail-prev', 'btn-rail-next'].map((id) => {
+          const el = document.getElementById(id), r = R(el);
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { id, x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height), hit: !!hit && el.contains(hit) };
+        });
+        return { rail: document.documentElement.classList.contains('is-rail'), vw: innerWidth, navL: Math.round(nav.left), navR: Math.round(nav.right),
+          logoY: Math.round(R(document.querySelector('.logo-link')).top), logoX: Math.round(R(document.querySelector('.logo-link')).left),
+          readout: document.getElementById('rail-readout').textContent, btns };
+      });
+      const order = [g.logoY, ...g.btns.map(b => b.y)].every((y, i, a) => i === 0 || y > a[i - 1]);
+      check(`rail (${vp.name}): at the right edge, badge · ☰ · search · ‹ date ›, buttons ≥ 44px, hittable`,
+        g.rail && g.navR === g.vw && g.navL >= g.vw - 80 && g.logoX >= g.navL && order
+          && g.btns.every(b => b.w >= 44 && b.h >= 44 && b.hit && b.x >= g.navL)
+          && /^[A-Z][a-z]{2} \d{1,2}, \d{4}$/.test(g.readout), JSON.stringify(g));
       await page.focus('#btn-rail-menu'); await page.keyboard.press('Enter'); await page.waitForTimeout(400);
-      const o = await page.evaluate(() => ({ inside: document.getElementById('nav-drawer').contains(document.activeElement), inert: document.getElementById('main').inert }));
-      check('rail: Enter on Menu opens the drawer with focus inside and #main inert', o.inside && o.inert, JSON.stringify(o));
+      const o = await page.evaluate(() => {
+        const d = document.getElementById('nav-drawer'), cb = document.querySelector('.mco-controlbar');
+        return { open: d.classList.contains('is-open'), focus: document.activeElement === d || d.contains(document.activeElement),
+          field: /^(INPUT|SELECT)$/.test(document.activeElement.tagName), inert: document.getElementById('main').inert,
+          cbLive: !cb.closest('[inert]'), drawerR: Math.round(d.getBoundingClientRect().right), navL: Math.round(document.getElementById('navbar').getBoundingClientRect().left) };
+      });
+      check(`rail (${vp.name}): Enter on ☰ opens the drawer beside the rail, focus on the drawer, #main inert, control bar live`,
+        o.open && o.focus && !o.field && o.inert && o.cbLive && o.drawerR <= o.navL + 1, JSON.stringify(o));
       await page.keyboard.press('Escape');
       await page.waitForFunction(() => document.activeElement.id === 'btn-rail-menu', null, { timeout: 5000 }).catch(() => {});
       const c = await page.evaluate(() => ({ focus: document.activeElement.id, inert: document.getElementById('main').inert }));
-      check('rail: Esc closes it and returns focus to Menu', c.focus === 'btn-rail-menu' && !c.inert, JSON.stringify(c));
+      check(`rail (${vp.name}): Esc closes it and returns focus to ☰`, c.focus === 'btn-rail-menu' && !c.inert, JSON.stringify(c));
       await close();
     }
     // URL state (HOUSE-STYLE §4): defaults elided, bad values dropped, the
@@ -205,6 +232,11 @@ export default {
       await page.waitForFunction(() => document.getElementById('detail-sheet').dataset.kind === 'basin', null, { timeout: 20000 }).catch(() => {});
       const opened = await st();
       check('basin: a watershed click opens it in the detail panel and pushes ?basin=', opened.open && /^\d+$/.test(opened.basin || ''), JSON.stringify(opened));
+      // Past the kit's 1 s pointer window (kit 1.0.0 arrowKeys): focus given
+      // within 1 s of the map click counts as the pointer's, and a radio a
+      // pointer focused steps the date. A keyboard user Tabs here (any key
+      // ends the window); page.focus() presses none.
+      await page.waitForTimeout(1100);
       await page.focus('#detail-flavor-btns input:checked');
       await page.keyboard.press('ArrowRight'); await page.waitForTimeout(800);
       const fl = await st();
@@ -322,8 +354,11 @@ export default {
     }
     // The phone bar (kit 0.21.0): one row at 390, ≤ 64px, badge at the left
     // edge and ☰ at the right; ☰ opens the right drawer with focus inside
-    // and the page inert, and Esc closes it back to ☰. The bar's stepper is
-    // the hot control: Enter on Next day steps the date.
+    // and the page inert, and Esc closes it back to ☰. The date stepper is
+    // in the bottom control bar (kit 1.0.0): docked at the bottom, its
+    // height published as --tabbar-h, the readout one line, live beside the
+    // open drawer, gone under a (simulated) keyboard, and Enter on its Next
+    // day steps the date.
     {
       const { page, close } = await open('?date=2026-02-15',
         { viewport: { name: '390x844', width: 390, height: 844, touch: true }, ready: painted, timeout: 45000 });
@@ -331,33 +366,58 @@ export default {
         const r = (el) => el.getBoundingClientRect();
         return { h: Math.round(r(document.getElementById('navbar')).height), logoX: Math.round(r(document.querySelector('.logo-link')).left),
           menuRight: Math.round(r(document.getElementById('btn-rail-menu')).right), w: innerWidth,
-          hot: ['btn-rail-prev', 'rail-readout', 'btn-rail-next', 'btn-search-toggle'].every(id => r(document.getElementById(id)).width > 0) };
+          search: r(document.getElementById('btn-search-toggle')).bottom <= r(document.getElementById('navbar')).bottom };
       });
-      check('phone bar: one row ≤ 64px, badge left, ☰ right, stepper and search in the row',
-        bar.h <= 64 && bar.logoX < 20 && bar.w - bar.menuRight < 20 && bar.hot, JSON.stringify(bar));
-      await page.focus('#btn-rail-menu'); await page.keyboard.press('Enter'); await page.waitForTimeout(400);
+      check('phone bar: one row ≤ 64px, badge left, ☰ right, search in the row',
+        bar.h <= 64 && bar.logoX < 20 && bar.w - bar.menuRight < 20 && bar.search, JSON.stringify(bar));
+      const cb = await page.evaluate(() => {
+        const el = document.querySelector('body > .mco-controlbar'), r = el.getBoundingClientRect(), ro = document.getElementById('rail-readout');
+        const inBar = ['btn-rail-prev', 'rail-readout', 'btn-rail-next'].every(id => el.contains(document.getElementById(id)));
+        return { bottom: Math.round(r.bottom), h: Math.round(r.height), vh: innerHeight, inBar, role: el.getAttribute('role'), name: el.getAttribute('aria-label'),
+          tabbar: getComputedStyle(document.documentElement).getPropertyValue('--tabbar-h').trim(), readout: ro.innerText, readoutH: Math.round(ro.getBoundingClientRect().height),
+          btnH: Math.round(document.getElementById('btn-rail-next').getBoundingClientRect().height) };
+      });
+      check('control bar: the date stepper docked at the bottom, --tabbar-h = its height, readout one line, 44px buttons',
+        cb.inBar && cb.role === 'group' && cb.name === 'Date' && cb.bottom === cb.vh && cb.tabbar === cb.h + 'px' && cb.h <= 64
+          && /^[A-Z][a-z]{2} \d{1,2}, \d{4}$/.test(cb.readout) && cb.btnH >= 44, JSON.stringify(cb));
+      const kb = await page.evaluate(() => new Promise((res) => {
+        const vv = window.visualViewport, h = document.documentElement.clientHeight - 300;
+        Object.defineProperty(vv, 'height', { configurable: true, get: () => h });
+        vv.dispatchEvent(new Event('resize'));
+        setTimeout(() => {
+          const el = document.querySelector('body > .mco-controlbar');
+          const out = { kb: document.documentElement.classList.contains('kb-open'), shown: el.getClientRects().length > 0,
+            tabbar: getComputedStyle(document.documentElement).getPropertyValue('--tabbar-h').trim() };
+          delete vv.height; vv.dispatchEvent(new Event('resize'));
+          setTimeout(() => { out.back = el.getClientRects().length > 0; res(out); }, 300);
+        }, 300);
+      }));
+      check('control bar: hidden under a simulated keyboard, back after it', kb.kb && !kb.shown && kb.tabbar === '0px' && kb.back, JSON.stringify(kb));
+      await page.focus('#btn-rail-menu'); await page.keyboard.press('Enter'); await page.waitForTimeout(900);
       const o = await page.evaluate(() => ({ inside: document.getElementById('nav-drawer').contains(document.activeElement), inert: document.getElementById('main').inert,
         right: Math.round(innerWidth - document.getElementById('nav-drawer').getBoundingClientRect().right) }));
-      check('phone bar: Enter on ☰ opens the right drawer with focus inside and #main inert', o.inside && o.inert && o.right === 0, JSON.stringify(o));
+      const cbLive = await page.evaluate(() => !document.querySelector('.mco-controlbar').closest('[inert]') && !document.querySelector('.mco-controlbar').inert);
+      check('phone bar: Enter on ☰ opens the right drawer with focus inside and #main inert, the control bar live', o.inside && o.inert && o.right === 0 && cbLive, JSON.stringify({ ...o, cbLive }));
       await page.keyboard.press('Escape');
       await page.waitForFunction(() => document.activeElement.id === 'btn-rail-menu', null, { timeout: 5000 }).catch(() => {});
       const c = await page.evaluate(() => ({ focus: document.activeElement.id, inert: document.getElementById('main').inert }));
       check('phone bar: Esc closes the drawer and returns focus to ☰', c.focus === 'btn-rail-menu' && !c.inert, JSON.stringify(c));
       await page.focus('#btn-rail-next'); await page.keyboard.press('Enter');
       await waitFor(page, '2026-02-16');
-      check('phone bar: Enter on the bar\'s Next day steps the date', (await val(page)) === '2026-02-16', await val(page));
+      check('control bar: Enter on its Next day steps the date', (await val(page)) === '2026-02-16', await val(page));
       await close();
     }
-    // ?station= opens the detail panel (the kit's sheet: end-docked at 1440,
-    // a bottom sheet at 390), and a station opened from the map pushes one
-    // entry that Back closes. The SNOTEL toggle is a chip.
+    // ?station= opens the detail panel (the kit's sheet: end-docked at 1440
+    // with the map live, full height under the bar at 390 with the bar and
+    // the control bar live, kit 1.0.0), and a station opened from the map
+    // pushes one entry that Back closes. The SNOTEL toggle is a chip.
     for (const vp of [{ name: '1440x900', width: 1440, height: 900 }, { name: '390x844', width: 390, height: 844, touch: true }]) {
       const shown = () => document.getElementById('detail-sheet').dataset.kind === 'station' && document.getElementById('detail-sheet').dataset.state !== 'closed';
       const deep = await open('?date=2026-10-30&station=901_MT_SNTL', { viewport: vp, ready: shown, timeout: 45000 }).catch(() => null);
       const d = deep ? await deep.page.evaluate(() => ({ state: document.getElementById('detail-sheet').dataset.state, title: document.getElementById('detail-title').textContent,
         station: new URLSearchParams(location.search).get('station'), chip: document.getElementById('btn-snotel').className + ' ' + document.getElementById('btn-snotel').getAttribute('aria-pressed') })) : null;
-      check(`station (${vp.name}): ?station= opens the detail panel (${vp.touch ? 'peek' : 'full'}), SNOTEL chip pressed`,
-        !!d && d.state === (vp.touch ? 'peek' : 'full') && d.station === '901_MT_SNTL' && d.title.length > 0 && /mco-chip true/.test(d.chip), JSON.stringify(d));
+      check(`station (${vp.name}): ?station= opens the detail panel, SNOTEL chip pressed`,
+        !!d && d.state === 'full' && d.station === '901_MT_SNTL' && d.title.length > 0 && /mco-chip true/.test(d.chip), JSON.stringify(d));
       if (deep) await deep.close();
       const { page, close } = await open('?date=2026-02-15&snotel=on&lng=-111.5&lat=46.0&zoom=6', { viewport: vp, ready: painted, timeout: 45000 });
       await page.waitForFunction(() => [...document.querySelectorAll('table')].find(t => /^SNOTEL/.test(t.caption?.textContent || ''))?.querySelector('button[tabindex="0"]'), null, { timeout: 20000 }).catch(() => {});
@@ -371,6 +431,151 @@ export default {
         focus: document.activeElement && (document.activeElement.id || document.activeElement.tagName) }));
       check(`station (${vp.name}): a table-twin row opens the panel with one pushed entry, and Back closes it`,
         o.kind === 'station' && !!o.station && o.len === len0 + 1 && b.state === 'closed' && !b.station && b.focus !== 'BODY', JSON.stringify({ o, b, len0 }));
+      await close();
+    }
+    // The station panel at every size (kit 1.0.0). On compact it is full
+    // height under the bar (beside the rail in landscape) down to the
+    // control bar, the whole width left of the rail, with #main inert and the
+    // bar and the control bar live; above compact it is docked at the right
+    // edge with the map live. The header is the same everywhere: the title
+    // and a 44px close button at the top right, no grip. The close button is
+    // hittable and closes it.
+    for (const vp of [{ name: '320x568', width: 320, height: 568, touch: true }, { name: '390x844', width: 390, height: 844, touch: true },
+      { name: '750x342', width: 750, height: 342, touch: true }, { name: '844x390', width: 844, height: 390, touch: true },
+      { name: '768x1024', width: 768, height: 1024, touch: true }, { name: '1440x900', width: 1440, height: 900 }]) {
+      const shown = () => document.getElementById('detail-sheet').dataset.kind === 'station' && document.getElementById('detail-sheet').dataset.state === 'full';
+      const { page, close } = await open('?date=2026-10-30&station=901_MT_SNTL', { viewport: vp, ready: shown, timeout: 45000 });
+      await page.waitForTimeout(500);
+      const g = await page.evaluate(() => {
+        const R = (el) => el.getBoundingClientRect(), sh = document.getElementById('detail-sheet'), s = R(sh);
+        const nav = R(document.getElementById('navbar')), cbEl = document.querySelector('.mco-controlbar');
+        const cb = cbEl.getClientRects().length ? R(cbEl) : null;
+        const rail = document.documentElement.classList.contains('is-rail');
+        const x = sh.querySelector('[data-close-sheet]'), xr = R(x), hit = document.elementFromPoint(xr.left + xr.width / 2, xr.top + xr.height / 2);
+        const head = [...sh.querySelector('.mco-sheet-head').children].filter(e => e.getClientRects().length).map(e => e.tagName + (e.matches('[data-close-sheet]') ? '.close' : ''));
+        return { compact: matchMedia('(max-width: 640px), (max-height: 560px)').matches, rail, vw: innerWidth, vh: innerHeight,
+          s: [s.left, s.top, s.right, s.bottom].map(Math.round), navBottom: Math.round(nav.bottom), navLeft: Math.round(nav.left),
+          cbTop: cb && !rail ? Math.round(cb.top) : null, mainInert: document.getElementById('main').inert,
+          navLive: !document.getElementById('navbar').closest('[inert]'), cbLive: !cbEl.closest('[inert]'),
+          close: [Math.round(xr.width), Math.round(xr.height)], closeHit: !!hit && x.contains(hit), closeTopRight: xr.right >= s.right - 24 && xr.top <= s.top + 24,
+          grip: !!sh.querySelector('.mco-sheet-grip'), head };
+      });
+      const rectOk = g.compact
+        ? g.s[0] === 0 && g.s[1] === (g.rail ? 0 : g.navBottom) && g.s[2] === (g.rail ? g.navLeft : g.vw) && g.s[3] === (g.cbTop ?? g.vh)
+        : g.s[1] === g.navBottom && g.s[2] === g.vw && g.s[0] > 0 && g.s[3] === (g.cbTop ?? g.vh);
+      const liveOk = g.compact ? g.mainInert && g.navLive && g.cbLive : !g.mainInert;
+      check(`panel (${vp.name}): ${g.compact ? 'full height under the bar, bar and control bar live, rest inert' : 'docked at the right edge, map live'}; header H2 + 44px close top right, no grip`,
+        rectOk && liveOk && g.close[0] >= 44 && g.close[1] >= 44 && g.closeHit && g.closeTopRight && !g.grip && g.head.join(',') === 'H2,BUTTON.close', JSON.stringify(g));
+      if (vp.touch) await page.tap('#detail-sheet [data-close-sheet]'); else await page.click('#detail-sheet [data-close-sheet]');
+      await page.waitForTimeout(800);
+      const c = await page.evaluate(() => ({ state: document.getElementById('detail-sheet').dataset.state, station: new URLSearchParams(location.search).get('station'), inert: document.getElementById('main').inert }));
+      check(`panel (${vp.name}): the close button closes it`, c.state === 'closed' && !c.station && !c.inert, JSON.stringify(c));
+      await close();
+    }
+    // The legend (kit 1.0.0 MCO.initLegendDrawer). On a phone the panel is in
+    // a "Legend" group at the end of the ☰ drawer and a Legend button holds
+    // its corner of the map, clear of the control bar; the button opens the
+    // drawer at the legend (expanded, focus on its title) and Esc returns to
+    // it. Above compact the legend floats on the map and there is no button.
+    for (const vp of [{ name: '390x844', width: 390, height: 844, touch: true }, { name: '844x390', width: 844, height: 390, touch: true },
+      { name: '768x1024', width: 768, height: 1024, touch: true }, { name: '1440x900', width: 1440, height: 900 }]) {
+      const { page, close } = await open('?date=2026-02-15', { viewport: vp, ready: painted, timeout: 45000 });
+      const g = await page.evaluate(() => {
+        const lg = document.getElementById('legend'), btn = document.querySelector('.mco-legend-btn'), main = document.getElementById('main');
+        const br = btn && !btn.hidden ? btn.getBoundingClientRect() : null, cb = document.querySelector('.mco-controlbar');
+        const cbr = cb.getClientRects().length ? cb.getBoundingClientRect() : null;
+        return { compact: matchMedia('(max-width: 640px), (max-height: 560px)').matches, inDrawer: !!lg.closest('#nav-drawer'), floating: lg.parentElement === main && lg.getClientRects().length > 0,
+          slot: lg.parentElement?.getAttribute('aria-label') || null, btn: br && [Math.round(br.left), Math.round(br.top), Math.round(br.width), Math.round(br.height)],
+          btnName: btn && !btn.hidden ? btn.textContent.trim() : null, clearOfBar: !br || !cbr || br.bottom <= cbr.top || br.right <= cbr.left };
+      });
+      check(`legend (${vp.name}): ${g.compact ? 'in the drawer\'s Legend group, a Legend button on the map clear of the control bar' : 'floating on the map, no Legend button'}`,
+        g.compact ? g.inDrawer && g.slot === 'Legend' && !!g.btn && g.btnName === 'Legend' && g.clearOfBar : g.floating && !g.btn, JSON.stringify(g));
+      if (g.compact) {
+        await page.click('.mco-legend-btn'); await page.waitForTimeout(500);
+        const o = await page.evaluate(() => ({ open: document.getElementById('nav-drawer').classList.contains('is-open'), focus: document.activeElement.id,
+          expanded: document.getElementById('legend-toggle').getAttribute('aria-expanded'), rows: document.querySelectorAll('#legend-rows .legend-row').length,
+          titleTop: Math.round(document.getElementById('legend-title').getBoundingClientRect().top), vh: innerHeight }));
+        await page.keyboard.press('Escape'); await page.waitForTimeout(400);
+        const back = await page.evaluate(() => document.activeElement.classList.contains('mco-legend-btn'));
+        check(`legend (${vp.name}): the button opens the drawer at the legend, expanded, focus on its title; Esc returns to the button`,
+          o.open && o.focus === 'legend-title' && o.expanded === 'true' && o.rows === 11 && o.titleTop >= 0 && o.titleTop < o.vh && back, JSON.stringify({ ...o, back }));
+      }
+      await close();
+    }
+    // ← / → step the date (kit 1.0.0 arrowKeys on the date steppers, Kyle
+    // 2026-11-13). From the page they step; in the date field, on a radio
+    // reached by keyboard, with a dialog open, with a modifier, and on the
+    // map reached by Tab they keep their own meaning; on the map after a
+    // click ← / → step and ↑ hands it back to panning. aria-keyshortcuts on
+    // the steppers' buttons; ?kbd=off turns the keys and the attributes off.
+    {
+      // 1920 wide: the bar's segmented radios show above 1760 (app.js SEG_MQ).
+      const wide = { name: '1920x1080', width: 1920, height: 1080 };
+      const { page, close } = await open('?date=2026-02-15', { viewport: wide, ready: painted, timeout: 45000 });
+      const press = async (key, focus) => {
+        const before = await val(page);
+        if (focus) await focus();
+        await page.keyboard.press(key); await page.waitForTimeout(700);
+        return { before, after: await val(page) };
+      };
+      const shortcuts = await page.evaluate(() => ['btn-date-prev', 'btn-date-next', 'btn-rail-prev', 'btn-rail-next', 'btn-detail-prev', 'btn-detail-next', 'btn-frame-prev', 'btn-frame-next']
+        .map(id => document.getElementById(id).getAttribute('aria-keyshortcuts')));
+      check('arrows: aria-keyshortcuts on the date steppers\' buttons (the frame stepper keeps its own)',
+        shortcuts.join(',') === 'ArrowLeft,ArrowRight,ArrowLeft,ArrowRight,ArrowLeft,ArrowRight,ArrowLeft,ArrowRight', JSON.stringify(shortcuts));
+      const page1 = await press('ArrowRight', () => page.focus('#main'));
+      const page2 = await press('ArrowLeft');
+      check('arrows: → and ← from the page step the date', page1.after === '2026-02-16' && page2.after === '2026-02-15', JSON.stringify({ page1, page2 }));
+      const mod = await press('Shift+ArrowRight', () => page.focus('#main'));
+      check('arrows: with a modifier they do nothing', mod.after === mod.before, JSON.stringify(mod));
+      const field = await press('ArrowRight', () => page.focus('#date-input'));
+      check('arrows: in the date field they are the field\'s', field.after === field.before, JSON.stringify(field));
+      const radio = await press('ArrowRight', () => page.focus('#flavor-btns input:checked'));
+      const flavor = await page.evaluate(() => document.querySelector('#flavor-btns input:checked').value);
+      check('arrows: on a radio reached by keyboard they move the choice, not the date', radio.after === radio.before && flavor === 'fitted', JSON.stringify({ ...radio, flavor }));
+      // Back to Smoothed: data2 has no Fitted WY2026 percentiles, and on
+      // Fitted the page can't move to 2026-02-14 by any control.
+      await page.keyboard.press('ArrowLeft'); await page.waitForTimeout(1500);
+      const mapKb = await press('ArrowRight', () => page.focus('#map canvas'));
+      check('arrows: on the map reached by keyboard they pan', mapKb.after === mapKb.before, JSON.stringify(mapKb));
+      // A click on a map that already has keyboard focus fires no focusin,
+      // so it stays the keyboard's (as in the hand-made version): move focus
+      // off it first, as a pointer user's would be.
+      await page.focus('#main');
+      const box = await page.locator('#map').boundingBox();
+      await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.2);
+      const mapPtr = await press('ArrowLeft');
+      const up = await press('ArrowUp');
+      const after = await press('ArrowLeft');
+      check('arrows: on the map after a click ← steps; after ↑ the arrows pan again', mapPtr.after !== mapPtr.before && up.after === up.before && after.after === after.before, JSON.stringify({ mapPtr, up, after }));
+      await page.click('#btn-info'); await page.waitForTimeout(400);
+      const dlg = await press('ArrowRight');
+      await page.keyboard.press('Escape');
+      check('arrows: with a dialog open they do nothing', dlg.after === dlg.before, JSON.stringify(dlg));
+      await close();
+      const off = await open('?date=2026-02-15&kbd=off', { viewport: wide, ready: painted, timeout: 45000 });
+      await off.page.focus('#main'); await off.page.keyboard.press('ArrowRight'); await off.page.waitForTimeout(700);
+      const o = await off.page.evaluate(() => ({ date: document.getElementById('date-input').value, ks: document.getElementById('btn-date-next').getAttribute('aria-keyshortcuts') }));
+      check('arrows: ?kbd=off turns them and aria-keyshortcuts off', o.date === '2026-02-15' && o.ks === null, JSON.stringify(o));
+      await off.close();
+    }
+    // The animation's own arrows win in the panel: ← / → step its frames,
+    // not the page date (its handler calls preventDefault first).
+    {
+      const { page, close } = await open('?date=2026-10-22&view=zonal&huc=4&basin=1002&plot=hypsomeswe', { ready: plotShown, timeout: 45000 });
+      const ready = await page.evaluate(() => !document.getElementById('basin-anim-group').hidden);
+      if (ready) {
+        await page.click('#btn-basin-anim');
+        await page.waitForFunction(() => !document.getElementById('basin-frames').hidden && document.getElementById('basin-frame-date').textContent.length > 0, null, { timeout: 30000 }).catch(() => {});
+        await page.evaluate(() => document.getElementById('basin-video').pause());
+        await page.focus('#btn-frame-next');
+        const f0 = await page.evaluate(() => document.getElementById('basin-frame-date').textContent);
+        const d0 = await val(page);
+        await page.keyboard.press('ArrowRight'); await page.waitForTimeout(600);
+        const f1 = await page.evaluate(() => document.getElementById('basin-frame-date').textContent);
+        check('arrows: in the animation panel → steps a frame, not the date', f1 !== f0 && (await val(page)) === d0, JSON.stringify({ f0, f1, d0, d1: await val(page) }));
+      } else {
+        check('arrows: in the animation panel → steps a frame, not the date (no animation listed for basin 1002)', null);
+      }
       await close();
     }
     // ?export=light downloads the branded PNG headlessly. It fires as soon as
