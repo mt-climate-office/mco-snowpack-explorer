@@ -2978,12 +2978,7 @@
     provenanceCtl.open();
   }
 
-  // On a phone the legend is in the ☰ drawer (kit 1.0.0), where everything
-  // outside the drawer, this dialog included, is inert: close the drawer
-  // first, as the info button does. Focus goes back to whatever opened it
-  // (☰ or the Legend button), and the dialog returns it there.
   document.getElementById('legend-info-btn').addEventListener('click', () => {
-    if (rail.isOpen()) rail.close();
     fetchProvenance(currentDate).then(showProvenance);
   });
 

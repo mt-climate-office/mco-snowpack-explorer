@@ -232,6 +232,11 @@
        the Legend button the kit puts at the panel's corner. The compact query
        (MCO.viewport.COMPACT_MQ), so a landscape phone's button clears it too. */
     @media (max-width: 640px), (max-height: 560px) { #legend { bottom: max(64px, calc(12px + env(safe-area-inset-bottom))); } }
+    /* Above compact on a touch screen MapLibre's attribution is 44px tall
+       (its touch target), and two lines (64px) beside the docked panel at
+       768×1024, so the floating legend sat 18px (38px with the panel open)
+       over it. Clear both. A mouse keeps the 36px above. */
+    @media (hover: none) and (min-width: 641px) and (min-height: 561px) { #legend { bottom: max(84px, calc(12px + env(safe-area-inset-bottom))); } }
     .legend-sub { font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 2px; }
     #legend-meta {
       font-family: var(--font-mono);
@@ -269,13 +274,6 @@
        wider here than the kit's 360px because the plots are 3:2 and their
        axis labels are small. */
     #detail-sheet { --sheet-w: 560px; }
-    /* kit-override: kit 1.0.0 stops the compact panel at the bottom control
-       bar (--tabbar-h) but docks the panel above compact at bottom: 0, and
-       this app's bar folds, with its control bar, up to about 1060px: at
-       768×1024 the panel's last 58px sat under the control bar. --tabbar-h
-       is 0 wherever the control bar is hidden, so this changes nothing else.
-       Reported for the kit; drop it when the kit does the same. */
-    #detail-sheet { bottom: var(--tabbar-h, 0px); }
     .detail-subtitle { margin: 0 0 0.75rem; font-size: 0.8rem; color: var(--text-secondary); }
     .basin-controls {
       display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.25rem;
