@@ -2905,8 +2905,7 @@
 
   // ── Info modal ────────────────────────────────────────────────────────────
   const infoModal = document.getElementById('info-modal');
-  // Dates that move are read from the code's own constants, never typed into copy.
-  for (const el of document.querySelectorAll('[data-fill="earliest-date"]')) el.textContent = MCO.formatDateStr(SNODAS_START);
+  // The credit line is the kit's, never typed into copy.
   document.getElementById('info-credit').textContent = MCO.credit({ source: 'NOAA SNODAS' });
   // The info button sits in the phone drawer: close it first (focus back to
   // ☰, which the dialog then returns to). Registered before the kit's own
@@ -2934,11 +2933,11 @@
   // Method detail lives here, not in the info dialog (VOICE: plain words
   // first, method last). From the normals README published beside the data.
   const FLAVOR_DESC = {
-    smoothed:  'A zero-adjusted gamma distribution whose parameters change smoothly through the snow year (cyclic P-splines), fit to every day of the reference record at once. Neighbouring days share information, so the normal for one date does not jump around from the next.',
-    fitted:    'A zero-inflated gamma distribution fit separately for each calendar day by L-moments, which smooths over sparse records and can extrapolate beyond observed extremes. Pixels with fewer than four snowy reference years fall back to the empirical distribution.',
-    empirical: 'The empirical distribution of the reference years for that calendar day, with no fitted curve. This year is ranked directly against them, so it cannot be ranked beyond the highest or lowest year in the record.',
+    smoothed:  'A zero-adjusted gamma distribution, fit to every day of the reference record at once. Its parameters change smoothly through the snow year, by cyclic P-splines. Neighbouring days share information, so one date\'s normal does not jump from the next.',
+    fitted:    'A zero-inflated gamma distribution, fit separately for each calendar day by L-moments. It smooths over sparse records and can extrapolate beyond observed extremes. Pixels with fewer than four snowy reference years use the empirical distribution.',
+    empirical: 'The reference years for that calendar day, with no fitted curve. This year is ranked directly against them. It cannot rank beyond the highest or lowest year on record.',
   };
-  const ZERO_NOTE = 'All three count bare ground separately. Zero SWE sits at the middle of the share of reference years that were also bare, so a place that is always bare on that date reads 50.';
+  const ZERO_NOTE = 'All three count bare ground separately. Zero SWE ranks at the middle of the reference years that were also bare. A place that is always bare on that date reads 50.';
   // mco-snodas s3-docs/gridded/normals/README.md, published with the data.
   const NORMALS_DOC = `${SNODAS_ROOT}/gridded/normals/README.md`;
   const WBD_URL    = 'https://www.usgs.gov/national-hydrography/watershed-boundary-dataset';
@@ -2958,15 +2957,15 @@
       hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
     });
     const hucText = currentView === 'zonal'
-      ? `, aggregated to HUC${currentHucLevel}.`
-      : ', available at HUC levels 2, 4, 6, and 8.';
+      ? `This view shows HUC${currentHucLevel} watersheds.`
+      : 'The zonal view shows HUC levels 2, 4, 6 and 8.';
 
     document.getElementById('provenance-content').replaceChildren(
       section('Gridded data', h('p', {},
         link(SNODAS_URL, 'NOAA SNODAS'),
-        ' (Snow Data Assimilation System) estimates snow water equivalent once a day on a 1 km grid across the contiguous United States. Its record starts in late 2003.')),
+        ', the Snow Data Assimilation System, estimates snow water equivalent once a day. It covers the contiguous United States on a 1 km grid. Its record starts in late 2003.')),
       section('Zonal data', h('p', {},
-        'Watershed boundaries are from the ', link(WBD_URL, 'USGS Watershed Boundary Dataset'), ` (WBD)${hucText}`)),
+        'Watershed boundaries are from the ', link(WBD_URL, 'USGS Watershed Boundary Dataset'), `. ${hucText}`)),
       section(methodLabel, h('p', { textContent: FLAVOR_DESC[prov.flavor] || '' }), h('p', { textContent: ZERO_NOTE }),
         h('p', {}, 'The full method: ', link(NORMALS_DOC, 'SWE normals and percentiles'), '.')),
       section('Reference period', h('p', { textContent: `${prov.n_reference_years} SNODAS dates spanning ${refRange(prov)}.` })),
