@@ -317,9 +317,9 @@
     .basin-caption a { color: var(--text-secondary); }
     .basin-data { margin-top: 0.9rem; font-size: 0.8rem; }
     .basin-data summary { cursor: pointer; font-weight: 600; color: var(--text-secondary); }
-    /* kit-override: the kit does not style a <details> in the info outline.
-       The help's collapsed reference: a 40px target, with the native marker. */
+    /* kit-override: the kit does not style <details> in the info outline yet (kit 1.0.1 will; delete this then). */
     .info-section summary { cursor: pointer; font-weight: 600; color: var(--text-secondary); padding: 0.6rem 0; }
+    .info-section code, .info-section kbd { white-space: nowrap; }
     .basin-data table { border-collapse: collapse; margin-top: 0.5rem; font-variant-numeric: tabular-nums; }
     .basin-data th, .basin-data td { padding: 2px 10px 2px 0; text-align: right; border-bottom: 1px solid var(--border); }
     .basin-data th[scope="row"], .basin-data thead th:first-child { text-align: left; }
@@ -757,7 +757,7 @@
 
     <!-- The family's info outline (HOUSE-STYLE §1): What this shows · How to
          use it · Share or bookmark · Data, 150 visible words at most, with
-         reference in at most two collapsed <details>. The method lives in
+         reference in at most two collapsed disclosures. The method lives in
          the legend's "About this data" dialog. -->
     <div class="info-section">
       <h3>What this shows</h3>
@@ -769,13 +769,13 @@
       </ul>
       <details>
         <summary>Which normals should I use?</summary>
-        <p>Each choice turns past years into a range of normal snow for the date.</p>
+        <p>Each choice turns past years into a normal range for the date.</p>
         <ul>
           <li><strong>Smoothed</strong> is the default. It fits one curve through the whole snow year.
               It changes least from day to day.</li>
-          <li><strong>Fitted</strong> fits a curve to each calendar day on its own.</li>
+          <li><strong>Fitted</strong> fits a curve to each calendar day alone.</li>
           <li><strong>Empirical</strong> ranks this year directly against past years. It is the noisiest.
-              It cannot rank snow beyond the record.</li>
+              It cannot rank beyond the record.</li>
         </ul>
         <p>The three differ most early and late in the season and at low elevations.</p>
       </details>
@@ -789,7 +789,7 @@
         <li>Tap the map for its percentile, or a <strong>Zonal</strong> watershed for its plots.</li>
         <li>Tap <strong>SNOTEL</strong>, then a station, for its plot.</li>
         <li>Keys: <kbd>/</kbd> search, <kbd>←</kbd> <kbd>→</kbd> change the day, <kbd>Esc</kbd> close.
-            <code>?kbd=off</code> in the address turns off <kbd>/</kbd> and the arrows.</li>
+            Add <code>?kbd=off</code> to the address to turn off <kbd>/</kbd> and the arrows.</li>
       </ul>
       <details>
         <summary>What the plots show</summary>
