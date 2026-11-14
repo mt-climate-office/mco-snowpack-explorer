@@ -24,7 +24,7 @@ in past years and colored with the U.S. Drought Monitor categories (D4 to W4).
   in the SNODAS domain, colored by its own SWE percentile for the date and
   flavor, against the `snodas` normals period (the SNODAS normals' reference
   years). Clicking one opens its seasonal SWE plot, in any of the three
-  flavors, in the detail panel beside the map (a bottom sheet on a phone). Read from `https://data2.climate.umt.edu/snotel/`, written by
+  flavors, in the detail panel beside the map (full height under the bar on a phone). Read from `https://data2.climate.umt.edu/snotel/`, written by
   mco-snotel (its `CONSUMERS.md`). The map's date D shows SNOTEL's D − 1:
   SNODAS is the analysis at midnight Mountain as D begins, and mco-snotel
   stamps NRCS daily values at the end of their day, so that same midnight is
