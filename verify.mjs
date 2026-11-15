@@ -397,6 +397,14 @@ if (ANIM) {
   await ctx.close();
 }
 
+// An impossible day is an invalid ?date=: the page opens on the latest date.
+{
+  const { ctx, page } = await open('?date=2026-02-30', { ready: painted });
+  const r = await page.evaluate(() => ({ shown: document.getElementById('date-input').value, q: new URLSearchParams(location.search).get('date') }));
+  check('[url] ?date=2026-02-30 opens on the manifests\' date', r.shown === D && r.q === D, JSON.stringify(r));
+  await ctx.close();
+}
+
 // An old link still lands on its flavor, rewritten in v1's name.
 {
   const { ctx, page } = await open(`?date=${D}&flavor=zig`, { ready: painted });
