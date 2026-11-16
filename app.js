@@ -1975,7 +1975,7 @@
   // pinned kit tag, CORS-loaded (jsDelivr sends ACAO: *) so the canvas stays
   // exportable; img-src already allows cdn.jsdelivr.net. The fixed-color twin
   // is picked by the EXPORT's background, not the page theme.
-  const KIT_ASSETS = 'https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.0.0/assets';
+  const KIT_ASSETS = 'https://cdn.jsdelivr.net/gh/mt-climate-office/mco-web-style@1.1.0/assets';
   const WORDMARK_ASPECT = 432 / 159;   // the SVGs' viewBox
   const _wordmarks = new Map();        // 'on-dark' | 'on-light' → Promise<Image|null>
   function loadWordmark(variant) {
@@ -2169,7 +2169,7 @@
   }
 
   // ── Phone bar (kit 0.21.0 compact drawer; 0.10.0 rail, right edge 1.0.0) ─
-  // On a phone the bar is one row (badge · search · ☰) and ☰ opens
+  // On a phone the bar is one row (badge · search · page tools · ☰) and ☰ opens
   // .mco-nav-drawer, holding the rest, as a right drawer under it; on a
   // landscape phone the bar is the rail at the right edge and the drawer
   // opens beside it. The date stepper is the bottom control bar's (index.html).
