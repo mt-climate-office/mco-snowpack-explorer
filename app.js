@@ -174,7 +174,8 @@
     return el;
   }
 
-  const isIsoDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '') && !isNaN(new Date(`${s}T12:00:00`));
+  // Round-trips, so an impossible day (2026-02-30) is rejected, not rolled over.
+  const isIsoDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '') && MCO.shiftDate(s, 0) === s;
 
   // ── URL / state ───────────────────────────────────────────────────────────
   // URL is the primary state (HOUSE-STYLE §4): read once here, every value
