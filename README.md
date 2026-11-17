@@ -68,6 +68,6 @@ node verify.mjs --list                   # print the keys it reads
 
 ## Kit
 
-mco-web-style 1.1.0, pinned with SRI in `index.html` and `app.js`.
+mco-web-style 1.1.1, pinned with SRI in `index.html` and `app.js`.
 
 Design rules: mco-web-style/HOUSE-STYLE.md
