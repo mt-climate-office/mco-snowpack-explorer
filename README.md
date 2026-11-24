@@ -13,7 +13,7 @@ python3 -m http.server 8000
 
 ## Deploy
 
-Pushing `main` deploys it to GitHub Pages from the repository root. A push is a release.
+Pushing `main` deploys it to GitHub Pages through `.github/workflows/pages.yml`. A push is a release. The same workflow refreshes the social card (`assets/og-card.jpg`) every 6 hours.
 
 ## URL parameters
 
